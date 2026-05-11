@@ -5,6 +5,18 @@ export async function sendVerificationEmail(args: {
   to: string;
   verifyUrl: string;
 }) {
+  if (
+    !env.SMTP_HOST ||
+    !env.SMTP_PORT ||
+    env.SMTP_SECURE === undefined ||
+    !env.SMTP_USER ||
+    !env.SMTP_PASS
+  ) {
+    throw new Error(
+      "Email service is not configured. Set SMTP_* environment variables.",
+    );
+  }
+
   const transporter = nodemailer.createTransport({
     host: env.SMTP_HOST,
     port: env.SMTP_PORT,
