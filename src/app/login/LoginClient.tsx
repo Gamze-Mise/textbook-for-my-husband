@@ -52,7 +52,8 @@ export default function LoginClient() {
       return;
     }
 
-    window.location.href = res.url ?? callbackUrl;
+    const target = res.url && !res.url.includes("/login") ? res.url : callbackUrl;
+    window.location.href = target;
   }
 
   return (

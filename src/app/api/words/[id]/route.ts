@@ -22,17 +22,23 @@ export async function PATCH(
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await ctx.params;
+  const wordId = Number(id);
+  if (!Number.isFinite(wordId)) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
 
-  const word = await prisma.word.findFirst({ where: { id, userId } });
+  const word = await prisma.word.findFirst({
+    where: { id: wordId, userId: Number(userId) },
+  });
   if (!word) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   try {
     const updated = await prisma.word.update({
-      where: { id },
+      where: { id: wordId },
       data: {
         ...(parsed.data.bucket ? { bucket: parsed.data.bucket } : {}),
         ...(parsed.data.term !== undefined ? { term: parsed.data.term.trim() } : {}),
@@ -67,10 +73,16 @@ export async function DELETE(
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await ctx.params;
-  const word = await prisma.word.findFirst({ where: { id, userId } });
+  const wordId = Number(id);
+  if (!Number.isFinite(wordId)) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  const word = await prisma.word.findFirst({
+    where: { id: wordId, userId: Number(userId) },
+  });
   if (!word) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  await prisma.word.delete({ where: { id } });
+  await prisma.word.delete({ where: { id: wordId } });
   return NextResponse.json({ ok: true });
 }
 

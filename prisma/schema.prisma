@@ -18,7 +18,7 @@ enum WordBucket {
 }
 
 model User {
-  id              String    @id @default(cuid())
+  id              Int       @id @default(autoincrement())
   email           String    @unique
   passwordHash    String
   emailVerifiedAt DateTime?
@@ -32,7 +32,7 @@ model User {
 }
 
 model PendingSignup {
-  id           String   @id @default(cuid())
+  id           Int      @id @default(autoincrement())
   email        String   @unique
   passwordHash String
   tokenHash    String   @unique
@@ -41,7 +41,7 @@ model PendingSignup {
 }
 
 model PasswordReset {
-  id           String   @id @default(cuid())
+  id           Int      @id @default(autoincrement())
   email        String
   tokenHash    String   @unique
   expiresAt    DateTime
@@ -54,8 +54,8 @@ model PasswordReset {
 
 // NextAuth models (Prisma Adapter compatible)
 model Account {
-  id                 String  @id @default(cuid())
-  userId             String
+  id                 Int     @id @default(autoincrement())
+  userId             Int
   type               String
   provider           String
   providerAccountId  String
@@ -73,9 +73,9 @@ model Account {
 }
 
 model Session {
-  id           String   @id @default(cuid())
+  id           Int      @id @default(autoincrement())
   sessionToken String   @unique
-  userId       String
+  userId       Int
   expires      DateTime
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -90,8 +90,8 @@ model VerificationToken {
 }
 
 model Word {
-  id            String     @id @default(cuid())
-  userId        String
+  id            Int        @id @default(autoincrement())
+  userId        Int
   term          String
   meaning       String
   example       String?

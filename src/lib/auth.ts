@@ -33,7 +33,7 @@ export const authOptions: NextAuthOptions = {
           throw new Error("INVALID_CREDENTIALS");
         }
 
-        return { id: user.id, email: user.email };
+        return { id: String(user.id), email: user.email };
       },
     }),
   ],

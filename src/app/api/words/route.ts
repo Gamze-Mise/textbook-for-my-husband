@@ -47,13 +47,17 @@ export async function GET(req: Request) {
   const userId = session?.user?.id;
   if (!userId)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const uid = Number(userId);
+  if (!Number.isFinite(uid)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const { searchParams } = new URL(req.url);
   const bucket = searchParams.get("bucket");
 
   if (bucket === "MIXED") {
     const words = await prisma.word.findMany({
-      where: { userId },
+      where: { userId: uid },
       orderBy: { updatedAt: "desc" },
     });
 
@@ -73,7 +77,7 @@ export async function GET(req: Request) {
       : null;
 
   const words = await prisma.word.findMany({
-    where: { userId, ...(whereBucket ? { bucket: whereBucket } : {}) },
+    where: { userId: uid, ...(whereBucket ? { bucket: whereBucket } : {}) },
     orderBy: { updatedAt: "desc" },
   });
 
@@ -85,6 +89,10 @@ export async function POST(req: Request) {
   const userId = session?.user?.id;
   if (!userId)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const uid = Number(userId);
+  if (!Number.isFinite(uid)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const parsed = createSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -98,7 +106,7 @@ export async function POST(req: Request) {
   try {
     const word = await prisma.word.create({
       data: {
-        userId,
+        userId: uid,
         term,
         meaning,
         example,
