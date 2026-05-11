@@ -16,11 +16,14 @@ function applyTheme(theme: Theme) {
 }
 
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof window === "undefined") return "system";
-    const stored = localStorage.getItem(KEY) as Theme | null;
-    return stored ?? "system";
-  });
+  // Keep SSR + first client render consistent to avoid hydration mismatch.
+  const [theme, setTheme] = useState<Theme>("system");
+
+  useEffect(() => {
+    const stored = (localStorage.getItem(KEY) as Theme | null) ?? "system";
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTheme(stored);
+  }, []);
 
   useEffect(() => {
     applyTheme(theme);
