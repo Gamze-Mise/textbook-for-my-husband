@@ -11,6 +11,8 @@ const patchSchema = z.object({
   example: z.string().max(600).nullable().optional(),
   audioUrl: z.string().url().nullable().optional(),
   audioPublicId: z.string().nullable().optional(),
+  exampleAudioUrl: z.string().url().nullable().optional(),
+  exampleAudioPublicId: z.string().nullable().optional(),
 });
 
 export async function PATCH(
@@ -51,6 +53,12 @@ export async function PATCH(
         ...(parsed.data.audioUrl !== undefined ? { audioUrl: parsed.data.audioUrl } : {}),
         ...(parsed.data.audioPublicId !== undefined
           ? { audioPublicId: parsed.data.audioPublicId }
+          : {}),
+        ...(parsed.data.exampleAudioUrl !== undefined
+          ? { exampleAudioUrl: parsed.data.exampleAudioUrl }
+          : {}),
+        ...(parsed.data.exampleAudioPublicId !== undefined
+          ? { exampleAudioPublicId: parsed.data.exampleAudioPublicId }
           : {}),
       },
     });

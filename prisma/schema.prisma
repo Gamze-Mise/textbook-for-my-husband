@@ -98,6 +98,8 @@ model Word {
   bucket        WordBucket @default(FORGOTTEN)
   audioUrl      String?
   audioPublicId String?
+  exampleAudioUrl      String?
+  exampleAudioPublicId String?
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 

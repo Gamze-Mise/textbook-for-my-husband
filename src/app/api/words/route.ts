@@ -11,6 +11,8 @@ const createSchema = z.object({
   bucket: z.enum(["KNOWN", "TO_STUDY", "FORGOTTEN"]).optional(),
   audioUrl: z.string().url().optional(),
   audioPublicId: z.string().optional(),
+  exampleAudioUrl: z.string().url().optional(),
+  exampleAudioPublicId: z.string().optional(),
 });
 
 function pickMixed<T>(args: { forgotten: T[]; toStudy: T[]; known: T[] }) {
@@ -113,6 +115,8 @@ export async function POST(req: Request) {
         bucket: parsed.data.bucket ?? "FORGOTTEN",
         audioUrl: parsed.data.audioUrl,
         audioPublicId: parsed.data.audioPublicId,
+        exampleAudioUrl: parsed.data.exampleAudioUrl,
+        exampleAudioPublicId: parsed.data.exampleAudioPublicId,
       },
     });
     return NextResponse.json({ ok: true, word });

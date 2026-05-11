@@ -15,6 +15,9 @@ yarn-error.log*
 # Prisma
 prisma/dev.db
 
+# Stale local output (not used by this app)
+src/generated/
+
 # Editor
 .vscode/
 .idea/

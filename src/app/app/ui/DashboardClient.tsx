@@ -16,6 +16,8 @@ type Word = {
   bucket: "KNOWN" | "TO_STUDY" | "FORGOTTEN";
   audioUrl: string | null;
   audioPublicId: string | null;
+  exampleAudioUrl?: string | null;
+  exampleAudioPublicId?: string | null;
 };
 
 function textSizeForLength(args: {
@@ -97,6 +99,50 @@ export default function DashboardClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
+  async function persistExampleAudio(wordId: string, exampleText: string) {
+    const ex = exampleText.trim();
+    if (!ex) return { ok: true as const };
+
+    const tts = await fetch("/api/audio/tts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: ex }),
+    });
+    const ttsJson = (await tts.json().catch(() => null)) as
+      | { ok: true; audioUrl: string; audioPublicId: string }
+      | { error: string }
+      | null;
+    if (!tts.ok || !ttsJson || "error" in ttsJson) {
+      return {
+        ok: false as const,
+        error: "Example audio could not be generated.",
+      };
+    }
+
+    const patch = await fetch(`/api/words/${wordId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        exampleAudioUrl: ttsJson.audioUrl,
+        exampleAudioPublicId: ttsJson.audioPublicId,
+      }),
+    });
+    const patchJson = (await patch.json().catch(() => null)) as
+      | { ok: true }
+      | { error: string }
+      | null;
+    if (!patch.ok || !patchJson || "error" in patchJson) {
+      return {
+        ok: false as const,
+        error:
+          patchJson && "error" in patchJson
+            ? patchJson.error
+            : "Example audio could not be saved. Run `npx prisma db push` or apply migrations for exampleAudioUrl / exampleAudioPublicId.",
+      };
+    }
+    return { ok: true as const };
+  }
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return words;
@@ -160,6 +206,11 @@ export default function DashboardClient() {
       setSaving(false);
       setError(json && "error" in json ? json.error : "Save failed.");
       return;
+    }
+
+    if (example.trim()) {
+      const ex = await persistExampleAudio(json.word.id, example);
+      if (!ex.ok) setNotice(ex.error);
     }
 
     // If audio generation failed, we still save the word, then try once more.
@@ -258,6 +309,9 @@ export default function DashboardClient() {
         term: termTrim,
         meaning: meaningTrim,
         example: editExample.trim() || null,
+        ...(editExample.trim() !== (editing.example ?? "").trim()
+          ? { exampleAudioUrl: null, exampleAudioPublicId: null }
+          : {}),
         ...(audioUrl !== editing.audioUrl || audioPublicId !== editing.audioPublicId
           ? { audioUrl, audioPublicId }
           : {}),
@@ -274,6 +328,13 @@ export default function DashboardClient() {
     if (!res.ok || !json || "error" in json) {
       setError(json && "error" in json ? json.error : "Update failed.");
       return;
+    }
+
+    const exampleChanged =
+      editExample.trim() !== (editing.example ?? "").trim();
+    if (editExample.trim() && (exampleChanged || !editing.exampleAudioUrl)) {
+      const ex = await persistExampleAudio(editing.id, editExample);
+      if (!ex.ok) setNotice(ex.error);
     }
 
     setEditing(null);

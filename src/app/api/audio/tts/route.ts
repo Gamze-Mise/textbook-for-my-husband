@@ -6,28 +6,11 @@ import { cloudinary } from "@/lib/cloudinary";
 import googleTTS from "google-tts-api";
 
 const bodySchema = z.object({
-  term: z.string().min(1).max(64),
+  term: z.string().min(1).max(64).optional(),
+  text: z.string().min(1).max(600).optional(),
+}).refine((v) => Boolean(v.term?.trim() || v.text?.trim()), {
+  message: "Either term or text is required.",
 });
-
-function uploadToCloudinary(buffer: Buffer, publicId: string) {
-  return new Promise<{ secure_url: string; public_id: string }>(
-    (resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream(
-        {
-          resource_type: "video",
-          folder: "textbook/audio",
-          public_id: publicId,
-          overwrite: true,
-        },
-        (error, result) => {
-          if (error || !result) return reject(error);
-          resolve({ secure_url: result.secure_url, public_id: result.public_id });
-        },
-      );
-      stream.end(buffer);
-    },
-  );
-}
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -40,10 +23,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
 
-  const term = parsed.data.term.trim();
+  const raw = (parsed.data.text ?? parsed.data.term ?? "").trim();
+  const folder = parsed.data.text?.trim()
+    ? "textbook/audio/example"
+    : "textbook/audio/word";
 
   // NOTE: This uses Google Translate TTS endpoint via google-tts-api.
-  const url = googleTTS.getAudioUrl(term, {
+  const url = googleTTS.getAudioUrl(raw, {
     lang: "en",
     slow: false,
     host: "https://translate.google.com",
@@ -61,11 +47,27 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "TTS request failed." }, { status: 502 });
   }
 
-  const safe = term.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40);
+  const safe = raw.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40);
   const publicId = `${safe}-${Date.now()}`;
 
   try {
-    const uploaded = await uploadToCloudinary(buffer, publicId);
+    const uploaded = await new Promise<{ secure_url: string; public_id: string }>(
+      (resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          {
+            resource_type: "video",
+            folder,
+            public_id: publicId,
+            overwrite: true,
+          },
+          (error, result) => {
+            if (error || !result) return reject(error);
+            resolve({ secure_url: result.secure_url, public_id: result.public_id });
+          },
+        );
+        stream.end(buffer);
+      },
+    );
 
     return NextResponse.json({
       ok: true,

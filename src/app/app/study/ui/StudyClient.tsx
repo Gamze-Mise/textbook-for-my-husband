@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ThemeToggle from "@/components/ThemeToggle";
 
 type Bucket = "KNOWN" | "TO_STUDY" | "FORGOTTEN" | "MIXED";
@@ -13,6 +13,8 @@ type Word = {
   example: string | null;
   bucket: "KNOWN" | "TO_STUDY" | "FORGOTTEN";
   audioUrl: string | null;
+  exampleAudioUrl?: string | null;
+  exampleAudioPublicId?: string | null;
 };
 
 const BUCKETS: Bucket[] = ["MIXED", "FORGOTTEN", "KNOWN"];
@@ -34,12 +36,14 @@ function label(b: Bucket) {
 const CARD_BODY = "flex min-h-[22rem] flex-col";
 
 export default function StudyClient() {
+  const studyRootRef = useRef<HTMLDivElement | null>(null);
   const [bucket, setBucket] = useState<Bucket>("MIXED");
   const [words, setWords] = useState<Word[]>([]);
   const [idx, setIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [exampleAudio, setExampleAudio] = useState<Record<string, string>>({});
 
   const current = words[idx] ?? null;
   const remaining = useMemo(
@@ -76,15 +80,108 @@ export default function StudyClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bucket]);
 
-  function next() {
+  const next = useCallback(() => {
     setFlipped(false);
     setIdx((v) => Math.min(v + 1, Math.max(0, words.length - 1)));
-  }
+  }, [words.length]);
 
-  function prev() {
+  const prev = useCallback(() => {
     setFlipped(false);
     setIdx((v) => Math.max(v - 1, 0));
-  }
+  }, []);
+
+  useEffect(() => {
+    function refocusAfterNav() {
+      requestAnimationFrame(() => {
+        for (const node of document.querySelectorAll("audio")) {
+          try {
+            (node as HTMLAudioElement).blur();
+          } catch {
+            /* ignore */
+          }
+        }
+        const ae = document.activeElement;
+        if (ae instanceof HTMLElement && ae !== document.body) ae.blur();
+        studyRootRef.current?.focus({ preventScroll: true });
+      });
+    }
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName?.toLowerCase();
+      const isTypingTarget =
+        tag === "input" ||
+        tag === "textarea" ||
+        tag === "select" ||
+        Boolean(el?.isContentEditable);
+      if (isTypingTarget) return;
+
+      // Capture phase: intercept before <audio controls> shadow UI.
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Same intent as Next / Previous buttons (next/prev clamp idx internally).
+      if (e.key === "ArrowRight") next();
+      else prev();
+
+      refocusAfterNav();
+    }
+
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [next, prev]);
+
+  useEffect(() => {
+    if (!flipped) return;
+    if (!current?.example?.trim()) return;
+    if (exampleAudio[current.id] || current.exampleAudioUrl) return;
+
+    const ac = new AbortController();
+    void (async () => {
+      try {
+        const res = await fetch("/api/audio/tts", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text: current.example }),
+          signal: ac.signal,
+        });
+        const json = (await res.json().catch(() => null)) as
+          | { ok: true; audioUrl: string; audioPublicId: string }
+          | { error: string }
+          | null;
+        if (!res.ok || !json || !("ok" in json && json.ok)) return;
+
+        setExampleAudio((prev) => ({ ...prev, [current.id]: json.audioUrl }));
+
+        const patchRes = await fetch(`/api/words/${current.id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            exampleAudioUrl: json.audioUrl,
+            exampleAudioPublicId: json.audioPublicId,
+          }),
+          signal: ac.signal,
+        });
+        const patchJson = (await patchRes.json().catch(() => null)) as
+          | { error: string }
+          | { ok: true }
+          | null;
+        if (!patchRes.ok || !patchJson || "error" in patchJson) {
+          setError(
+            patchJson && "error" in patchJson
+              ? patchJson.error
+              : "Example audio could not be saved. Run `npx prisma db push` (or apply migrations) so the database has exampleAudioUrl columns.",
+          );
+        }
+      } catch (e) {
+        if (e instanceof Error && e.name === "AbortError") return;
+      }
+    })();
+
+    return () => ac.abort();
+  }, [flipped, current, exampleAudio]);
 
   function mark(nextBucket: "KNOWN" | "FORGOTTEN") {
     if (!current) return;
@@ -137,7 +234,11 @@ export default function StudyClient() {
   );
 
   return (
-    <div className="mx-auto w-full max-w-3xl p-6">
+    <div
+      ref={studyRootRef}
+      tabIndex={-1}
+      className="mx-auto w-full max-w-3xl p-6 outline-none focus:outline-none"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-sm text-zinc-600 dark:text-zinc-400">
@@ -212,8 +313,9 @@ export default function StudyClient() {
                 </div>
                 {current.audioUrl ? (
                   <audio
-                    className="w-full"
+                    className="w-full rounded-lg outline-none focus:outline-none focus-visible:outline-none"
                     controls
+                    tabIndex={-1}
                     src={current.audioUrl}
                     onClick={(e) => e.stopPropagation()}
                   />
@@ -253,11 +355,19 @@ export default function StudyClient() {
                     </div>
                   </div>
                 </div>
-                {current.audioUrl ? (
+                {current.audioUrl ||
+                current.exampleAudioUrl ||
+                exampleAudio[current.id] ? (
                   <audio
-                    className="w-full"
+                    className="w-full rounded-lg outline-none focus:outline-none focus-visible:outline-none"
                     controls
-                    src={current.audioUrl}
+                    tabIndex={-1}
+                    src={
+                      current.exampleAudioUrl ||
+                      exampleAudio[current.id] ||
+                      current.audioUrl ||
+                      undefined
+                    }
                     onClick={(e) => e.stopPropagation()}
                   />
                 ) : null}
