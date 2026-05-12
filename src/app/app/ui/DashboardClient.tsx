@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { signOut, useSession } from "next-auth/react";
 import ThemeToggle from "@/components/ThemeToggle";
+import WordImage from "@/components/WordImage";
 import Link from "next/link";
 import LogoMark from "@/components/LogoMark";
 
@@ -14,10 +15,12 @@ type Word = {
   meaning: string;
   example: string | null;
   bucket: "KNOWN" | "TO_STUDY" | "FORGOTTEN";
-  audioUrl: string | null;
   audioPublicId: string | null;
-  exampleAudioUrl?: string | null;
   exampleAudioPublicId?: string | null;
+  audioSrc: string | null;
+  exampleAudioSrc?: string | null;
+  imagePublicId?: string | null;
+  imageSrc?: string | null;
 };
 
 function textSizeForLength(args: {
@@ -58,6 +61,11 @@ export default function DashboardClient() {
   const [meaning, setMeaning] = useState("");
   const [example, setExample] = useState("");
   const [saving, setSaving] = useState(false);
+  const [addImageFile, setAddImageFile] = useState<File | null>(null);
+  const [addImagePreviewUrl, setAddImagePreviewUrl] = useState<string | null>(
+    null,
+  );
+  const addPreviewRef = useRef<string | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -66,6 +74,12 @@ export default function DashboardClient() {
   const [editMeaning, setEditMeaning] = useState("");
   const [editExample, setEditExample] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+  const [editImageFile, setEditImageFile] = useState<File | null>(null);
+  const [editImagePreviewUrl, setEditImagePreviewUrl] = useState<string | null>(
+    null,
+  );
+  const editPreviewRef = useRef<string | null>(null);
+  const [editImageClear, setEditImageClear] = useState(false);
   const [deleting, setDeleting] = useState<Word | null>(null);
   const [deletingNow, setDeletingNow] = useState(false);
 
@@ -77,7 +91,7 @@ export default function DashboardClient() {
   async function load(opts?: { silent?: boolean }) {
     if (!opts?.silent) setLoading(true);
     setError(null);
-    const res = await fetch(`/api/words?bucket=${active}`);
+    const res = await fetch(`/api/words?bucket=${active}&library=1`);
     const json = (await res.json().catch(() => null)) as
       | { ok: true; words: Word[] }
       | { error: string }
@@ -99,6 +113,75 @@ export default function DashboardClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
+  function revokeAddPreview() {
+    if (addPreviewRef.current) {
+      URL.revokeObjectURL(addPreviewRef.current);
+      addPreviewRef.current = null;
+    }
+    setAddImagePreviewUrl(null);
+  }
+
+  function setAddImagePickerFile(f: File | null) {
+    revokeAddPreview();
+    setAddImageFile(f);
+    if (f) {
+      const u = URL.createObjectURL(f);
+      addPreviewRef.current = u;
+      setAddImagePreviewUrl(u);
+    }
+  }
+
+  function revokeEditPreview() {
+    if (editPreviewRef.current) {
+      URL.revokeObjectURL(editPreviewRef.current);
+      editPreviewRef.current = null;
+    }
+    setEditImagePreviewUrl(null);
+  }
+
+  function setEditImagePickerFile(f: File | null) {
+    revokeEditPreview();
+    setEditImageFile(f);
+    setEditImageClear(false);
+    if (f) {
+      const u = URL.createObjectURL(f);
+      editPreviewRef.current = u;
+      setEditImagePreviewUrl(u);
+    }
+  }
+
+  function clearEditWordImage() {
+    revokeEditPreview();
+    setEditImageFile(null);
+    setEditImageClear(true);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (addPreviewRef.current) URL.revokeObjectURL(addPreviewRef.current);
+      if (editPreviewRef.current) URL.revokeObjectURL(editPreviewRef.current);
+    };
+  }, []);
+
+  async function uploadWordImage(
+    file: File,
+  ): Promise<{ ok: true; imagePublicId: string } | { ok: false; error: string }> {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/words/image", { method: "POST", body: fd });
+    const json = (await res.json().catch(() => null)) as
+      | { ok: true; imagePublicId: string }
+      | { error: string }
+      | null;
+    if (!res.ok || !json || !("ok" in json && json.ok)) {
+      return {
+        ok: false,
+        error: json && "error" in json ? json.error : "Image upload failed.",
+      };
+    }
+    return { ok: true, imagePublicId: json.imagePublicId };
+  }
+
   async function persistExampleAudio(wordId: string, exampleText: string) {
     const ex = exampleText.trim();
     if (!ex) return { ok: true as const };
@@ -109,7 +192,7 @@ export default function DashboardClient() {
       body: JSON.stringify({ text: ex }),
     });
     const ttsJson = (await tts.json().catch(() => null)) as
-      | { ok: true; audioUrl: string; audioPublicId: string }
+      | { ok: true; audioPublicId: string; audioSrc: string }
       | { error: string }
       | null;
     if (!tts.ok || !ttsJson || "error" in ttsJson) {
@@ -123,7 +206,6 @@ export default function DashboardClient() {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        exampleAudioUrl: ttsJson.audioUrl,
         exampleAudioPublicId: ttsJson.audioPublicId,
       }),
     });
@@ -137,7 +219,7 @@ export default function DashboardClient() {
         error:
           patchJson && "error" in patchJson
             ? patchJson.error
-            : "Example audio could not be saved. Run `npx prisma db push` or apply migrations for exampleAudioUrl / exampleAudioPublicId.",
+            : "Example audio could not be saved. Run `npx prisma db push` or apply migrations for exampleAudioPublicId.",
       };
     }
     return { ok: true as const };
@@ -160,7 +242,6 @@ export default function DashboardClient() {
     setError(null);
     setNotice(null);
 
-    let audioUrl: string | undefined;
     let audioPublicId: string | undefined;
     let audioFailed = false;
 
@@ -171,16 +252,26 @@ export default function DashboardClient() {
         body: JSON.stringify({ term }),
       });
       const ttsJson = (await tts.json().catch(() => null)) as
-        | { ok: true; audioUrl: string; audioPublicId: string }
+        | { ok: true; audioPublicId: string; audioSrc: string }
         | { error: string }
         | null;
 
       if (!tts.ok || !ttsJson || "error" in ttsJson) {
         audioFailed = true;
       } else {
-        audioUrl = ttsJson.audioUrl;
         audioPublicId = ttsJson.audioPublicId;
       }
+    }
+
+    let imagePublicId: string | undefined;
+    if (addImageFile) {
+      const img = await uploadWordImage(addImageFile);
+      if (!img.ok) {
+        setSaving(false);
+        setError(img.error);
+        return;
+      }
+      imagePublicId = img.imagePublicId;
     }
 
     const res = await fetch("/api/words", {
@@ -192,8 +283,8 @@ export default function DashboardClient() {
         example: example || undefined,
         // New words always start in "Needs review"
         bucket: "FORGOTTEN",
-        audioUrl,
         audioPublicId,
+        ...(imagePublicId ? { imagePublicId } : {}),
       }),
     });
 
@@ -222,7 +313,7 @@ export default function DashboardClient() {
           body: JSON.stringify({ term }),
         });
         const ttsJson = (await tts.json().catch(() => null)) as
-          | { ok: true; audioUrl: string; audioPublicId: string }
+          | { ok: true; audioPublicId: string; audioSrc: string }
           | { error: string }
           | null;
 
@@ -231,7 +322,6 @@ export default function DashboardClient() {
             method: "PATCH",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
-              audioUrl: ttsJson.audioUrl,
               audioPublicId: ttsJson.audioPublicId,
             }),
           }).catch(() => null);
@@ -253,6 +343,7 @@ export default function DashboardClient() {
     setTerm("");
     setMeaning("");
     setExample("");
+    setAddImagePickerFile(null);
     await load();
   }
 
@@ -261,6 +352,8 @@ export default function DashboardClient() {
     setEditTerm(w.term);
     setEditMeaning(w.meaning);
     setEditExample(w.example ?? "");
+    setEditImagePickerFile(null);
+    setEditImageClear(false);
     setError(null);
   }
 
@@ -278,7 +371,6 @@ export default function DashboardClient() {
       return;
     }
 
-    let audioUrl: string | null | undefined = editing.audioUrl;
     let audioPublicId: string | null | undefined = editing.audioPublicId;
 
     if (termTrim !== editing.term) {
@@ -288,18 +380,29 @@ export default function DashboardClient() {
         body: JSON.stringify({ term: termTrim }),
       });
       const ttsJson = (await tts.json().catch(() => null)) as
-        | { ok: true; audioUrl: string; audioPublicId: string }
+        | { ok: true; audioPublicId: string; audioSrc: string }
         | { error: string }
         | null;
 
       if (tts.ok && ttsJson && !("error" in ttsJson)) {
-        audioUrl = ttsJson.audioUrl;
         audioPublicId = ttsJson.audioPublicId;
       } else {
-        audioUrl = null;
         audioPublicId = null;
         setNotice("Term updated; pronunciation audio could not be regenerated.");
       }
+    }
+
+    let nextImagePublicId: string | null | undefined = undefined;
+    if (editImageClear && !editImageFile) {
+      if (editing.imagePublicId) nextImagePublicId = null;
+    } else if (editImageFile) {
+      const up = await uploadWordImage(editImageFile);
+      if (!up.ok) {
+        setSavingEdit(false);
+        setError(up.error);
+        return;
+      }
+      nextImagePublicId = up.imagePublicId;
     }
 
     const res = await fetch(`/api/words/${editing.id}`, {
@@ -310,10 +413,13 @@ export default function DashboardClient() {
         meaning: meaningTrim,
         example: editExample.trim() || null,
         ...(editExample.trim() !== (editing.example ?? "").trim()
-          ? { exampleAudioUrl: null, exampleAudioPublicId: null }
+          ? { exampleAudioPublicId: null }
           : {}),
-        ...(audioUrl !== editing.audioUrl || audioPublicId !== editing.audioPublicId
-          ? { audioUrl, audioPublicId }
+        ...(audioPublicId !== editing.audioPublicId
+          ? { audioPublicId }
+          : {}),
+        ...(nextImagePublicId !== undefined
+          ? { imagePublicId: nextImagePublicId }
           : {}),
       }),
     });
@@ -332,12 +438,14 @@ export default function DashboardClient() {
 
     const exampleChanged =
       editExample.trim() !== (editing.example ?? "").trim();
-    if (editExample.trim() && (exampleChanged || !editing.exampleAudioUrl)) {
+    if (editExample.trim() && (exampleChanged || !editing.exampleAudioPublicId)) {
       const ex = await persistExampleAudio(editing.id, editExample);
       if (!ex.ok) setNotice(ex.error);
     }
 
     setEditing(null);
+    setEditImagePickerFile(null);
+    setEditImageClear(false);
     await load({ silent: true });
   }
 
@@ -391,7 +499,15 @@ export default function DashboardClient() {
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowAdd(true)}
+            onClick={() => {
+              setError(null);
+              setNotice(null);
+              setTerm("");
+              setMeaning("");
+              setExample("");
+              setAddImagePickerFile(null);
+              setShowAdd(true);
+            }}
             className="rounded-xl bg-zinc-900 px-3 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-950"
           >
             + Add word
@@ -493,8 +609,9 @@ export default function DashboardClient() {
       </main>
 
       {showAdd ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6">
-          <div className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40">
+          <div className="flex min-h-full items-center justify-center p-4 sm:p-6">
+            <div className="relative w-full max-w-xl max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="text-lg font-semibold">Add a new card</div>
@@ -504,7 +621,10 @@ export default function DashboardClient() {
               </div>
               <button
                 className="rounded-lg px-2 py-1 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
-                onClick={() => setShowAdd(false)}
+                onClick={() => {
+                  setShowAdd(false);
+                  setAddImagePickerFile(null);
+                }}
               >
                 Close
               </button>
@@ -531,6 +651,57 @@ export default function DashboardClient() {
                   rows={3}
                 />
               </label>
+
+              <div className="block text-sm">
+                <span className="text-zinc-700 dark:text-zinc-300">
+                  Illustration{" "}
+                  <span className="font-normal text-zinc-500 dark:text-zinc-400">
+                    (optional)
+                  </span>
+                </span>
+                <div className="mt-2 overflow-hidden rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/80 dark:border-zinc-600 dark:bg-zinc-900/40">
+                  <div className="relative aspect-[16/10] w-full bg-zinc-100 dark:bg-zinc-900/80">
+                    <WordImage
+                      src={addImagePreviewUrl}
+                      alt=""
+                      className="absolute inset-0 size-full object-cover"
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-200/80 p-3 dark:border-zinc-800/80">
+                    <p className="text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
+                      JPEG, PNG, or WebP · max 2&nbsp;MB. Shown on the card front;
+                      if missing or broken, a default graphic is used.
+                    </p>
+                    <div className="flex shrink-0 gap-2">
+                      <label className="cursor-pointer rounded-xl bg-zinc-900 px-3 py-2 text-xs font-medium text-white dark:bg-zinc-100 dark:text-zinc-950">
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="sr-only"
+                          disabled={saving}
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) setAddImagePickerFile(f);
+                            e.target.value = "";
+                          }}
+                        />
+                        Choose file
+                      </label>
+                      {addImageFile ? (
+                        <button
+                          type="button"
+                          className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-medium dark:border-zinc-800 dark:bg-zinc-950"
+                          disabled={saving}
+                          onClick={() => setAddImagePickerFile(null)}
+                        >
+                          Remove
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <label className="block text-sm">
                 <span className="text-zinc-700 dark:text-zinc-300">Example</span>
                 <textarea
@@ -545,7 +716,10 @@ export default function DashboardClient() {
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium dark:border-zinc-800 dark:bg-zinc-950"
-                  onClick={() => setShowAdd(false)}
+                  onClick={() => {
+                    setShowAdd(false);
+                    setAddImagePickerFile(null);
+                  }}
                   disabled={saving}
                 >
                   Cancel
@@ -559,13 +733,15 @@ export default function DashboardClient() {
                 </button>
               </div>
             </div>
+            </div>
           </div>
         </div>
       ) : null}
 
       {editing ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6">
-          <div className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40">
+          <div className="flex min-h-full items-center justify-center p-4 sm:p-6">
+            <div className="relative w-full max-w-xl max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="text-lg font-semibold">Edit card</div>
@@ -575,7 +751,11 @@ export default function DashboardClient() {
               </div>
               <button
                 className="rounded-lg px-2 py-1 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
-                onClick={() => setEditing(null)}
+                onClick={() => {
+                  setEditing(null);
+                  setEditImagePickerFile(null);
+                  setEditImageClear(false);
+                }}
               >
                 Close
               </button>
@@ -601,6 +781,67 @@ export default function DashboardClient() {
                   rows={3}
                 />
               </label>
+
+              <div className="block text-sm">
+                <span className="text-zinc-700 dark:text-zinc-300">
+                  Illustration{" "}
+                  <span className="font-normal text-zinc-500 dark:text-zinc-400">
+                    (optional)
+                  </span>
+                </span>
+                <div className="mt-2 overflow-hidden rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/80 dark:border-zinc-600 dark:bg-zinc-900/40">
+                  <div className="relative aspect-[16/10] w-full bg-zinc-100 dark:bg-zinc-900/80">
+                    <WordImage
+                      src={
+                        editImagePreviewUrl ||
+                        (!editImageClear ? editing.imageSrc : null)
+                      }
+                      alt=""
+                      className="absolute inset-0 size-full object-cover"
+                    />
+                  </div>
+                  <div className="space-y-2 border-t border-zinc-200/80 p-3 dark:border-zinc-800/80">
+                    {editImageClear && editing.imagePublicId ? (
+                      <p className="text-xs text-amber-800 dark:text-amber-200/90">
+                        Illustration will be removed when you save.
+                      </p>
+                    ) : null}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
+                        JPEG, PNG, or WebP · max 2&nbsp;MB.
+                      </p>
+                      <div className="flex shrink-0 gap-2">
+                        <label className="cursor-pointer rounded-xl bg-zinc-900 px-3 py-2 text-xs font-medium text-white dark:bg-zinc-100 dark:text-zinc-950">
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            className="sr-only"
+                            disabled={savingEdit}
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) setEditImagePickerFile(f);
+                              e.target.value = "";
+                            }}
+                          />
+                          Replace
+                        </label>
+                        {editImageFile ||
+                        (editing.imageSrc && !editImageClear) ? (
+                          <button
+                            type="button"
+                            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-medium dark:border-zinc-800 dark:bg-zinc-950"
+                            disabled={savingEdit}
+                            onClick={() => clearEditWordImage()}
+                          >
+                            Remove
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <label className="block text-sm">
                 <span className="text-zinc-700 dark:text-zinc-300">Example</span>
                 <textarea
@@ -615,7 +856,11 @@ export default function DashboardClient() {
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium dark:border-zinc-800 dark:bg-zinc-950"
-                  onClick={() => setEditing(null)}
+                  onClick={() => {
+                    setEditing(null);
+                    setEditImagePickerFile(null);
+                    setEditImageClear(false);
+                  }}
                   disabled={savingEdit}
                 >
                   Cancel
@@ -629,13 +874,15 @@ export default function DashboardClient() {
                 </button>
               </div>
             </div>
+            </div>
           </div>
         </div>
       ) : null}
 
       {deleting ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6">
-          <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40">
+          <div className="flex min-h-full items-center justify-center p-4 sm:p-6">
+            <div className="relative w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="text-lg font-semibold">Delete card?</div>
@@ -673,6 +920,7 @@ export default function DashboardClient() {
               >
                 {deletingNow ? "Deleting..." : "Delete"}
               </button>
+            </div>
             </div>
           </div>
         </div>
@@ -780,7 +1028,15 @@ function Flashcard({
       className="group rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950"
     >
       <div className="flex min-h-88 flex-col">
-        <div className="flex items-start justify-between gap-3">
+        <div className="overflow-hidden rounded-xl ring-1 ring-zinc-200/80 dark:ring-zinc-800">
+          <WordImage
+            src={word.imageSrc}
+            alt=""
+            className="aspect-[16/10] w-full object-cover"
+          />
+        </div>
+
+        <div className="mt-3 flex items-start justify-between gap-3">
           <div className="w-full min-w-0">
             <div className={[termSize, "font-semibold tracking-tight"].join(" ")}>
               {word.term}
@@ -816,8 +1072,8 @@ function Flashcard({
           ) : null}
         </div>
 
-        {word.audioUrl ? (
-          <audio className="w-full" controls src={word.audioUrl} />
+        {word.audioSrc ? (
+          <audio className="w-full" controls src={word.audioSrc} />
         ) : (
           <div className="h-10" aria-hidden />
         )}

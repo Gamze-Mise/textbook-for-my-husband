@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { cloudinary } from "@/lib/cloudinary";
+import { cloudinaryVideoDeliveryUrl } from "@/lib/cloudinaryDelivery";
 import googleTTS from "google-tts-api";
 
 const bodySchema = z.object({
@@ -71,8 +72,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ok: true,
-      audioUrl: uploaded.secure_url,
       audioPublicId: uploaded.public_id,
+      audioSrc: cloudinaryVideoDeliveryUrl(uploaded.public_id),
     });
   } catch (e) {
     const msg =

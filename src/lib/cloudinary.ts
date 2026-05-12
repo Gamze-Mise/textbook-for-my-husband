@@ -11,6 +11,9 @@ cloudinary.config({
   cloud_name: env.CLOUDINARY_CLOUD_NAME,
   api_key: env.CLOUDINARY_API_KEY,
   api_secret: env.CLOUDINARY_API_SECRET,
+  ...(env.CLOUDINARY_SECURE_DISTRIBUTION
+    ? { secure_distribution: env.CLOUDINARY_SECURE_DISTRIBUTION }
+    : {}),
 });
 
 export { cloudinary };

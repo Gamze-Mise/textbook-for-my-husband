@@ -18,6 +18,8 @@ const envSchema = z.object({
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
   CLOUDINARY_API_KEY: z.string().optional(),
   CLOUDINARY_API_SECRET: z.string().optional(),
+  /** Optional custom CDN host (e.g. `cdn.example.com`) for generated delivery URLs. */
+  CLOUDINARY_SECURE_DISTRIBUTION: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);

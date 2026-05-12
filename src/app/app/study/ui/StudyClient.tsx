@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ThemeToggle from "@/components/ThemeToggle";
+import WordImage from "@/components/WordImage";
 
 type Bucket = "KNOWN" | "TO_STUDY" | "FORGOTTEN" | "MIXED";
 
@@ -12,9 +13,12 @@ type Word = {
   meaning: string;
   example: string | null;
   bucket: "KNOWN" | "TO_STUDY" | "FORGOTTEN";
-  audioUrl: string | null;
-  exampleAudioUrl?: string | null;
+  audioPublicId?: string | null;
   exampleAudioPublicId?: string | null;
+  audioSrc: string | null;
+  exampleAudioSrc?: string | null;
+  imagePublicId?: string | null;
+  imageSrc?: string | null;
 };
 
 const BUCKETS: Bucket[] = ["MIXED", "FORGOTTEN", "KNOWN"];
@@ -33,7 +37,7 @@ function label(b: Bucket) {
 }
 
 /** Card height stays stable when flipping (front / back). */
-const CARD_BODY = "flex min-h-[22rem] flex-col";
+const CARD_BODY = "flex min-h-[26rem] flex-col";
 
 export default function StudyClient() {
   const studyRootRef = useRef<HTMLDivElement | null>(null);
@@ -43,7 +47,10 @@ export default function StudyClient() {
   const [flipped, setFlipped] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [exampleAudio, setExampleAudio] = useState<Record<string, string>>({});
+  /** Example clip just generated in-session (before list reload). */
+  const [exampleSrcOverride, setExampleSrcOverride] = useState<Record<string, string>>(
+    {},
+  );
 
   const current = words[idx] ?? null;
   const remaining = useMemo(
@@ -56,6 +63,7 @@ export default function StudyClient() {
     setError(null);
     setFlipped(false);
     setIdx(0);
+    setExampleSrcOverride({});
 
     const res = await fetch(`/api/words?bucket=${bucket}`);
     const json = (await res.json().catch(() => null)) as
@@ -136,7 +144,7 @@ export default function StudyClient() {
   useEffect(() => {
     if (!flipped) return;
     if (!current?.example?.trim()) return;
-    if (exampleAudio[current.id] || current.exampleAudioUrl) return;
+    if (exampleSrcOverride[current.id] || current.exampleAudioSrc) return;
 
     const ac = new AbortController();
     void (async () => {
@@ -148,18 +156,20 @@ export default function StudyClient() {
           signal: ac.signal,
         });
         const json = (await res.json().catch(() => null)) as
-          | { ok: true; audioUrl: string; audioPublicId: string }
+          | { ok: true; audioPublicId: string; audioSrc: string }
           | { error: string }
           | null;
         if (!res.ok || !json || !("ok" in json && json.ok)) return;
 
-        setExampleAudio((prev) => ({ ...prev, [current.id]: json.audioUrl }));
+        setExampleSrcOverride((prev) => ({
+          ...prev,
+          [current.id]: json.audioSrc,
+        }));
 
         const patchRes = await fetch(`/api/words/${current.id}`, {
           method: "PATCH",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            exampleAudioUrl: json.audioUrl,
             exampleAudioPublicId: json.audioPublicId,
           }),
           signal: ac.signal,
@@ -172,7 +182,7 @@ export default function StudyClient() {
           setError(
             patchJson && "error" in patchJson
               ? patchJson.error
-              : "Example audio could not be saved. Run `npx prisma db push` (or apply migrations) so the database has exampleAudioUrl columns.",
+              : "Example audio could not be saved. Run `npx prisma db push` (or apply migrations) for exampleAudioPublicId.",
           );
         }
       } catch (e) {
@@ -181,7 +191,7 @@ export default function StudyClient() {
     })();
 
     return () => ac.abort();
-  }, [flipped, current, exampleAudio]);
+  }, [flipped, current, exampleSrcOverride]);
 
   function mark(nextBucket: "KNOWN" | "FORGOTTEN") {
     if (!current) return;
@@ -301,7 +311,14 @@ export default function StudyClient() {
           >
             {!flipped ? (
               <div className={CARD_BODY}>
-                <div className="flex min-h-0 flex-1 items-center justify-center">
+                <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4">
+                  <div className="w-full max-w-md overflow-hidden rounded-2xl ring-1 ring-zinc-200/80 dark:ring-zinc-800">
+                    <WordImage
+                      src={current.imageSrc}
+                      alt=""
+                      className="aspect-[16/10] w-full object-cover"
+                    />
+                  </div>
                   <div className="w-full text-center">
                     <div className="text-4xl font-semibold tracking-tight">
                       {current.term}
@@ -311,12 +328,12 @@ export default function StudyClient() {
                     </div>
                   </div>
                 </div>
-                {current.audioUrl ? (
+                {current.audioSrc ? (
                   <audio
                     className="w-full rounded-lg outline-none focus:outline-none focus-visible:outline-none"
                     controls
                     tabIndex={-1}
-                    src={current.audioUrl}
+                    src={current.audioSrc}
                     onClick={(e) => e.stopPropagation()}
                   />
                 ) : (
@@ -355,17 +372,17 @@ export default function StudyClient() {
                     </div>
                   </div>
                 </div>
-                {current.audioUrl ||
-                current.exampleAudioUrl ||
-                exampleAudio[current.id] ? (
+                {current.audioSrc ||
+                current.exampleAudioSrc ||
+                exampleSrcOverride[current.id] ? (
                   <audio
                     className="w-full rounded-lg outline-none focus:outline-none focus-visible:outline-none"
                     controls
                     tabIndex={-1}
                     src={
-                      current.exampleAudioUrl ||
-                      exampleAudio[current.id] ||
-                      current.audioUrl ||
+                      current.exampleAudioSrc ||
+                      exampleSrcOverride[current.id] ||
+                      current.audioSrc ||
                       undefined
                     }
                     onClick={(e) => e.stopPropagation()}

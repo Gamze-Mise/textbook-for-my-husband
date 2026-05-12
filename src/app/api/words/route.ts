@@ -3,16 +3,16 @@ import { z } from "zod";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { wordToClient } from "@/lib/wordSerialize";
 
 const createSchema = z.object({
   term: z.string().min(1).max(64),
   meaning: z.string().min(1).max(400),
   example: z.string().max(600).optional(),
   bucket: z.enum(["KNOWN", "TO_STUDY", "FORGOTTEN"]).optional(),
-  audioUrl: z.string().url().optional(),
   audioPublicId: z.string().optional(),
-  exampleAudioUrl: z.string().url().optional(),
   exampleAudioPublicId: z.string().optional(),
+  imagePublicId: z.string().optional(),
 });
 
 function pickMixed<T>(args: { forgotten: T[]; toStudy: T[]; known: T[] }) {
@@ -56,20 +56,24 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const bucket = searchParams.get("bucket");
+  /** Dashboard library: stable order (newest first). Study mode omits this and keeps MIXED shuffled. */
+  const forLibrary =
+    searchParams.get("library") === "1" || searchParams.get("library") === "true";
 
-  if (bucket === "MIXED") {
+  if (bucket === "MIXED" && !forLibrary) {
     const words = await prisma.word.findMany({
       where: { userId: uid },
-      orderBy: { updatedAt: "desc" },
+      orderBy: { createdAt: "desc" },
     });
 
-    const forgotten = words.filter((w: (typeof words)[number]) => w.bucket === "FORGOTTEN");
-    const toStudy = words.filter((w: (typeof words)[number]) => w.bucket === "TO_STUDY");
-    const known = words.filter((w: (typeof words)[number]) => w.bucket === "KNOWN");
+    const forgotten = words.filter((w) => w.bucket === "FORGOTTEN");
+    const toStudy = words.filter((w) => w.bucket === "TO_STUDY");
+    const known = words.filter((w) => w.bucket === "KNOWN");
 
+    const mixed = pickMixed({ forgotten, toStudy, known });
     return NextResponse.json({
       ok: true,
-      words: pickMixed({ forgotten, toStudy, known }),
+      words: mixed.map(wordToClient),
     });
   }
 
@@ -79,11 +83,16 @@ export async function GET(req: Request) {
       : null;
 
   const words = await prisma.word.findMany({
-    where: { userId: uid, ...(whereBucket ? { bucket: whereBucket } : {}) },
-    orderBy: { updatedAt: "desc" },
+    where: {
+      userId: uid,
+      ...(bucket === "MIXED" || !whereBucket
+        ? {}
+        : { bucket: whereBucket }),
+    },
+    orderBy: { createdAt: "desc" },
   });
 
-  return NextResponse.json({ ok: true, words });
+  return NextResponse.json({ ok: true, words: words.map(wordToClient) });
 }
 
 export async function POST(req: Request) {
@@ -113,13 +122,12 @@ export async function POST(req: Request) {
         meaning,
         example,
         bucket: parsed.data.bucket ?? "FORGOTTEN",
-        audioUrl: parsed.data.audioUrl,
         audioPublicId: parsed.data.audioPublicId,
-        exampleAudioUrl: parsed.data.exampleAudioUrl,
         exampleAudioPublicId: parsed.data.exampleAudioPublicId,
+        imagePublicId: parsed.data.imagePublicId,
       },
     });
-    return NextResponse.json({ ok: true, word });
+    return NextResponse.json({ ok: true, word: wordToClient(word) });
   } catch {
     return NextResponse.json(
       { error: "This word already exists." },
