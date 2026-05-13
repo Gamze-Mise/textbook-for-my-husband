@@ -1,48 +1,30 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import AppNavLink from "@/components/app/AppNavLink";
+import AppPageHeader from "@/components/app/AppPageHeader";
+import AlertBanner from "@/components/app/AlertBanner";
 import ThemeToggle from "@/components/ThemeToggle";
 import WordImage from "@/components/WordImage";
+import { tabPillActive, tabPillIdle } from "@/components/ui/buttonClasses";
+import { type DeckTab, type WordCard, STUDY_DECK_TABS, deckTabLabel } from "@/types/word";
 
-type Bucket = "KNOWN" | "TO_STUDY" | "FORGOTTEN" | "MIXED";
+/** Rotating block: one physical “card” slab (both faces + actions). */
+const CARD_FLIP_H =
+  "relative h-[32rem] w-full max-h-[calc(100dvh-10rem)] sm:h-[34rem]";
 
-type Word = {
-  id: string;
-  term: string;
-  meaning: string;
-  example: string | null;
-  bucket: "KNOWN" | "TO_STUDY" | "FORGOTTEN";
-  audioPublicId?: string | null;
-  exampleAudioPublicId?: string | null;
-  audioSrc: string | null;
-  exampleAudioSrc?: string | null;
-  imagePublicId?: string | null;
-  imageSrc?: string | null;
-};
+const MAIN_SLOT =
+  "min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]";
+const AUDIO_SLOT =
+  "flex h-14 w-full shrink-0 items-center justify-center";
 
-const BUCKETS: Bucket[] = ["MIXED", "FORGOTTEN", "KNOWN"];
-
-function label(b: Bucket) {
-  switch (b) {
-    case "KNOWN":
-      return "Known";
-    case "TO_STUDY":
-      return "Learning";
-    case "FORGOTTEN":
-      return "Needs review";
-    case "MIXED":
-      return "Mixed";
-  }
-}
-
-/** Card height stays stable when flipping (front / back). */
-const CARD_BODY = "flex min-h-[26rem] flex-col";
+const FACE_SHELL =
+  "absolute inset-0 flex flex-col rounded-2xl border border-zinc-200 bg-white shadow-md dark:border-zinc-700 dark:bg-zinc-950 dark:shadow-[0_1px_0_0_rgba(255,255,255,0.04)]";
 
 export default function StudyClient() {
   const studyRootRef = useRef<HTMLDivElement | null>(null);
-  const [bucket, setBucket] = useState<Bucket>("MIXED");
-  const [words, setWords] = useState<Word[]>([]);
+  const [bucket, setBucket] = useState<DeckTab>("MIXED");
+  const [words, setWords] = useState<WordCard[]>([]);
   const [idx, setIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -67,7 +49,7 @@ export default function StudyClient() {
 
     const res = await fetch(`/api/words?bucket=${bucket}`);
     const json = (await res.json().catch(() => null)) as
-      | { ok: true; words: Word[] }
+      | { ok: true; words: WordCard[] }
       | { error: string }
       | null;
 
@@ -140,6 +122,39 @@ export default function StudyClient() {
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [next, prev]);
+
+  useEffect(() => {
+    if (!current) return;
+
+    function onFlipKey(e: KeyboardEvent) {
+      const container = studyRootRef.current;
+      if (!container) return;
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const el = e.target;
+      if (!(el instanceof HTMLElement) || !container.contains(el)) return;
+      const tag = el.tagName.toLowerCase();
+      if (
+        tag === "input" ||
+        tag === "textarea" ||
+        tag === "select" ||
+        el.isContentEditable
+      ) {
+        return;
+      }
+      if (el.closest("header")) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      setFlipped((v) => !v);
+    }
+
+    const attachTo = studyRootRef.current;
+    if (!attachTo) return;
+    attachTo.addEventListener("keydown", onFlipKey, true);
+    return () => {
+      attachTo.removeEventListener("keydown", onFlipKey, true);
+    };
+  }, [current]);
 
   useEffect(() => {
     if (!flipped) return;
@@ -249,37 +264,28 @@ export default function StudyClient() {
       tabIndex={-1}
       className="mx-auto w-full max-w-3xl p-6 outline-none focus:outline-none"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="text-sm text-zinc-600 dark:text-zinc-400">
-            Study mode
-          </div>
-          <h1 className="text-2xl font-semibold tracking-tight">Flashcards</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-          <Link
-            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium dark:border-zinc-800 dark:bg-zinc-950"
-            href="/app"
-          >
-            Back to library
-          </Link>
-        </div>
-      </div>
+      <AppPageHeader
+        kicker="Study mode"
+        title="Flashcards"
+        showBottomBorder={false}
+        actions={
+          <>
+            <ThemeToggle />
+            <AppNavLink href="/app">Library</AppNavLink>
+            <AppNavLink href="/app/quiz">Quiz</AppNavLink>
+          </>
+        }
+      />
 
       <div className="mt-6 flex flex-wrap items-center gap-2">
-        {BUCKETS.map((b) => (
+        {STUDY_DECK_TABS.map((b) => (
           <button
             key={b}
+            type="button"
             onClick={() => setBucket(b)}
-            className={[
-              "rounded-xl px-3 py-2 text-sm font-medium",
-              b === bucket
-                ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950"
-                : "border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950",
-            ].join(" ")}
+            className={b === bucket ? tabPillActive : tabPillIdle}
           >
-            {label(b)}
+            {deckTabLabel(b)}
           </button>
         ))}
         <div className="ml-auto text-sm text-zinc-600 dark:text-zinc-400">
@@ -288,15 +294,17 @@ export default function StudyClient() {
       </div>
 
       {error ? (
-        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-100">
-          {error}
+        <div className="mt-4">
+          <AlertBanner variant="error">{error}</AlertBanner>
         </div>
       ) : null}
 
       <div className="mt-6">
         {loading ? (
-          <div className="text-sm text-zinc-600 dark:text-zinc-400">
-            Loading...
+          <div className="animate-pulse space-y-4 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
+            <div className="mx-auto aspect-16/10 max-w-md rounded-2xl bg-zinc-200 dark:bg-zinc-800" />
+            <div className="mx-auto h-8 w-48 rounded-lg bg-zinc-200 dark:bg-zinc-800" />
+            <div className="mx-auto h-10 max-w-xs rounded-lg bg-zinc-200 dark:bg-zinc-800" />
           </div>
         ) : !current ? (
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
@@ -304,93 +312,151 @@ export default function StudyClient() {
           </div>
         ) : (
           <div
-            className="cursor-pointer rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950"
-            onClick={() => setFlipped((v) => !v)}
-            role="button"
+            className="mx-auto w-full max-w-xl rounded-2xl outline-none"
             tabIndex={0}
+            role="group"
+            aria-label={flipped ? "Card back" : "Card front"}
           >
-            {!flipped ? (
-              <div className={CARD_BODY}>
-                <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4">
-                  <div className="w-full max-w-md overflow-hidden rounded-2xl ring-1 ring-zinc-200/80 dark:ring-zinc-800">
-                    <WordImage
-                      src={current.imageSrc}
-                      alt=""
-                      className="aspect-[16/10] w-full object-cover"
-                    />
-                  </div>
-                  <div className="w-full text-center">
-                    <div className="text-4xl font-semibold tracking-tight">
-                      {current.term}
-                    </div>
-                    <div className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-                      Tap to flip
-                    </div>
-                  </div>
-                </div>
-                {current.audioSrc ? (
-                  <audio
-                    className="w-full rounded-lg outline-none focus:outline-none focus-visible:outline-none"
-                    controls
-                    tabIndex={-1}
-                    src={current.audioSrc}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                ) : (
-                  <div className="h-10" aria-hidden />
-                )}
-                {actions}
-              </div>
-            ) : (
-              <div className={CARD_BODY}>
-                <div className="flex min-h-0 flex-1 items-center justify-center">
-                  <div className="max-h-full w-full overflow-y-auto pr-1 text-center">
-                    <div className="space-y-4">
-                      <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                        Answer
+            <div className="[perspective:1400px]">
+              <div
+                className={`${CARD_FLIP_H} transform-gpu transition-[transform] duration-500 ease-[cubic-bezier(0.4,0.2,0.2,1)] will-change-transform motion-reduce:transition-none motion-reduce:duration-0 [transform-style:preserve-3d]`}
+                style={{
+                  transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
+                }}
+              >
+                <div
+                  className={`${FACE_SHELL} ${flipped ? "pointer-events-none" : "cursor-pointer"}`}
+                  inert={flipped ? true : undefined}
+                  aria-hidden={flipped}
+                  style={{
+                    WebkitBackfaceVisibility: "hidden",
+                    backfaceVisibility: "hidden",
+                    transform: "rotateY(0deg) translateZ(1px)",
+                  }}
+                  onClick={(e) => {
+                    const t = e.target as HTMLElement;
+                    if (
+                      t.closest("button") ||
+                      t.closest("audio") ||
+                      t.closest("input") ||
+                      t.closest("textarea")
+                    ) {
+                      return;
+                    }
+                    setFlipped((v) => !v);
+                  }}
+                >
+                  <div className="flex h-full min-h-0 w-full flex-col overflow-hidden p-5 sm:p-6">
+                    <div
+                      className={`${MAIN_SLOT} flex flex-col items-center justify-center gap-4 px-0 py-1`}
+                    >
+                      <div className="w-full max-w-md shrink-0 overflow-hidden rounded-2xl ring-1 ring-zinc-200/80 dark:ring-zinc-800">
+                        <WordImage
+                          src={current.imageSrc}
+                          alt=""
+                          className="aspect-16/10 w-full object-cover"
+                        />
                       </div>
-                      <div>
-                        <div className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
-                          Meaning
+                      <div className="w-full shrink-0 text-center">
+                        <div className="text-4xl font-semibold tracking-tight">
+                          {current.term}
                         </div>
-                        <div className="mt-1 text-base leading-7">
-                          {current.meaning}
+                        <div className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                          Tap to flip
                         </div>
                       </div>
-                      {current.example ? (
-                        <div>
-                          <div className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
-                            Example
-                          </div>
-                          <div className="mt-1 text-base leading-7 italic">
-                            {current.example}
-                          </div>
-                        </div>
+                    </div>
+                    <div className={AUDIO_SLOT}>
+                      {current.audioSrc ? (
+                        <audio
+                          className="h-10 w-full rounded-lg outline-none focus:outline-none focus-visible:outline-none"
+                          controls
+                          tabIndex={-1}
+                          src={current.audioSrc}
+                          onClick={(e) => e.stopPropagation()}
+                        />
                       ) : (
-                        <div className="min-h-14" aria-hidden />
+                        <div className="h-10 w-full" aria-hidden />
                       )}
                     </div>
+                    {actions}
                   </div>
                 </div>
-                {current.audioSrc ||
-                current.exampleAudioSrc ||
-                exampleSrcOverride[current.id] ? (
-                  <audio
-                    className="w-full rounded-lg outline-none focus:outline-none focus-visible:outline-none"
-                    controls
-                    tabIndex={-1}
-                    src={
-                      current.exampleAudioSrc ||
-                      exampleSrcOverride[current.id] ||
-                      current.audioSrc ||
-                      undefined
+
+                <div
+                  className={`${FACE_SHELL} ${!flipped ? "pointer-events-none" : "cursor-pointer"}`}
+                  inert={!flipped ? true : undefined}
+                  aria-hidden={!flipped}
+                  style={{
+                    WebkitBackfaceVisibility: "hidden",
+                    backfaceVisibility: "hidden",
+                    transform: "rotateY(180deg) translateZ(1px)",
+                  }}
+                  onClick={(e) => {
+                    const t = e.target as HTMLElement;
+                    if (
+                      t.closest("button") ||
+                      t.closest("audio") ||
+                      t.closest("input") ||
+                      t.closest("textarea")
+                    ) {
+                      return;
                     }
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                ) : null}
-                {actions}
+                    setFlipped((v) => !v);
+                  }}
+                >
+                  <div className="flex h-full min-h-0 w-full flex-col overflow-hidden p-5 sm:p-6">
+                    <div className={`${MAIN_SLOT} px-0 py-1`}>
+                      <div className="flex min-h-full w-full flex-col justify-center text-center">
+                        <div className="space-y-4">
+                          <div>
+                            <div className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+                              Meaning
+                            </div>
+                            <div className="mt-1 text-base leading-7">
+                              {current.meaning}
+                            </div>
+                          </div>
+                          {current.example ? (
+                            <div>
+                              <div className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+                                Example
+                              </div>
+                              <div className="mt-1 text-base leading-7 italic">
+                                {current.example}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="min-h-14" aria-hidden />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className={AUDIO_SLOT}>
+                      {current.audioSrc ||
+                      current.exampleAudioSrc ||
+                      exampleSrcOverride[current.id] ? (
+                        <audio
+                          className="h-10 w-full rounded-lg outline-none focus:outline-none focus-visible:outline-none"
+                          controls
+                          tabIndex={-1}
+                          src={
+                            current.exampleAudioSrc ||
+                            exampleSrcOverride[current.id] ||
+                            current.audioSrc ||
+                            undefined
+                          }
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        <div className="h-10 w-full" aria-hidden />
+                      )}
+                    </div>
+                    {actions}
+                  </div>
+                </div>
               </div>
-            )}
+            </div>
           </div>
         )}
       </div>

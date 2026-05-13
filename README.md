@@ -52,6 +52,7 @@ On Vercel:
 
 - Set all environment variables from `.env.example`
 - Ensure `DATABASE_URL` points to the production database
+- Build command is already set in `vercel.json` to `npm run vercel-build` (runs `prisma migrate deploy` before `next build`)
 
 ## Scripts
 
@@ -59,4 +60,3 @@ On Vercel:
 - `npm run build`: Production build
 - `npm run start`: Run production server locally
 - `npm run lint`: Run ESLint
-

@@ -1,0 +1,369 @@
+"use client";
+
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import AppNavLink from "@/components/app/AppNavLink";
+import AppPageHeader from "@/components/app/AppPageHeader";
+import AlertBanner from "@/components/app/AlertBanner";
+import ThemeToggle from "@/components/ThemeToggle";
+import WordImage from "@/components/WordImage";
+import { btnPrimary, btnSecondary } from "@/components/ui/buttonClasses";
+import type { QuizQuestion } from "@/types/quiz";
+import { quizCorrectCount } from "@/types/quiz";
+
+type QuizJson =
+  | { ok: true; questions: QuizQuestion[] }
+  | { error: string }
+  | null;
+
+export default function QuizClient() {
+  const promptId = useId();
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  const [questions, setQuestions] = useState<QuizQuestion[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState(0);
+  const [picked, setPicked] = useState<(number | null)[]>([]);
+  const [finished, setFinished] = useState(false);
+
+  const loadQuiz = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setFinished(false);
+    setStep(0);
+    setPicked([]);
+
+    const res = await fetch("/api/quiz");
+    const json = (await res.json().catch(() => null)) as QuizJson;
+
+    setLoading(false);
+
+    if (!res.ok || !json || !("ok" in json && json.ok)) {
+      setQuestions([]);
+      setError(json && "error" in json ? json.error : "Could not load quiz.");
+      return;
+    }
+
+    setQuestions(json.questions);
+    setPicked(Array.from({ length: json.questions.length }, () => null));
+  }, []);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      void loadQuiz();
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [loadQuiz]);
+
+  const total = questions.length;
+  const current = questions[step] ?? null;
+
+  const score = useMemo(() => {
+    if (!finished || !questions.length) return null;
+    return quizCorrectCount(questions, picked);
+  }, [finished, questions, picked]);
+
+  const progressPct = useMemo(() => {
+    if (!total) return 0;
+    if (finished) return 100;
+    return Math.round(((step + 1) / total) * 100);
+  }, [finished, step, total]);
+
+  const selectChoice = useCallback((index: number) => {
+    setPicked((prev) => {
+      const next = [...prev];
+      next[step] = index;
+      return next;
+    });
+  }, [step]);
+
+  const nextOrFinish = useCallback(() => {
+    if (step >= total - 1) {
+      setFinished(true);
+      return;
+    }
+    setStep((s) => s + 1);
+  }, [step, total]);
+
+  const prev = useCallback(() => {
+    setStep((s) => Math.max(0, s - 1));
+  }, []);
+
+  useEffect(() => {
+    if (finished || loading || error || !current || total === 0) return;
+
+    function onKey(e: KeyboardEvent) {
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.tagName === "SELECT" ||
+          t.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (e.key >= "1" && e.key <= "4") {
+        e.preventDefault();
+        selectChoice(Number(e.key) - 1);
+        return;
+      }
+      if (e.key === "Enter" && picked[step] !== null) {
+        e.preventDefault();
+        nextOrFinish();
+        return;
+      }
+
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        if (t?.closest("audio")) return;
+        if (e.key === "ArrowLeft") {
+          if (step > 0) {
+            e.preventDefault();
+            prev();
+          }
+          return;
+        }
+        if (picked[step] !== null) {
+          e.preventDefault();
+          nextOrFinish();
+        }
+      }
+    }
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [
+    current,
+    error,
+    finished,
+    loading,
+    nextOrFinish,
+    picked,
+    prev,
+    selectChoice,
+    step,
+    total,
+  ]);
+
+  useEffect(() => {
+    if (!loading && !finished && current) {
+      rootRef.current?.focus({ preventScroll: true });
+    }
+  }, [loading, finished, step, current]);
+
+  return (
+    <div
+      ref={rootRef}
+      tabIndex={-1}
+      className="mx-auto w-full max-w-2xl p-6 outline-none focus:outline-none"
+    >
+      <AppPageHeader
+        kicker="Vocabulary"
+        title="Quiz"
+        showBottomBorder={false}
+        actions={
+          <>
+            <ThemeToggle />
+            <AppNavLink href="/app">Library</AppNavLink>
+            <AppNavLink href="/app/study">Study</AppNavLink>
+          </>
+        }
+      />
+
+      <div className="mt-6 h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
+        <div
+          className="h-full rounded-full bg-zinc-900 transition-[width] duration-300 ease-out dark:bg-zinc-100"
+          style={{ width: `${progressPct}%` }}
+        />
+      </div>
+
+      {error ? (
+        <div className="mt-6">
+          <AlertBanner variant="warning">{error}</AlertBanner>
+        </div>
+      ) : null}
+
+      {loading ? (
+        <div className="mt-10 animate-pulse space-y-4" aria-hidden>
+          <div className="h-4 w-36 rounded-md bg-zinc-200 dark:bg-zinc-800" />
+          <div className="aspect-16/10 w-full rounded-2xl bg-zinc-200 dark:bg-zinc-800" />
+          <div className="h-10 w-2/3 rounded-lg bg-zinc-200 dark:bg-zinc-800" />
+          <div className="space-y-2">
+            <div className="h-12 w-full rounded-xl bg-zinc-200 dark:bg-zinc-800" />
+            <div className="h-12 w-full rounded-xl bg-zinc-200 dark:bg-zinc-800" />
+          </div>
+        </div>
+      ) : null}
+
+      {!loading && !error && total > 0 && !finished && current ? (
+        <div className="mt-8 space-y-6">
+          <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+            Question{" "}
+            <span className="tabular-nums">
+              {step + 1} / {total}
+            </span>
+          </p>
+
+          <article className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+            <div className="aspect-16/10 w-full bg-zinc-100 dark:bg-zinc-900">
+              <WordImage
+                src={current.imageSrc}
+                alt=""
+                className="size-full object-cover"
+              />
+            </div>
+            <div className="space-y-5 p-5 sm:p-6">
+              <header>
+                <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                  Word
+                </p>
+                <h2 className="mt-1 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+                  {current.term}
+                </h2>
+              </header>
+              {current.audioSrc ? (
+                <audio
+                  className="w-full rounded-lg"
+                  controls
+                  src={current.audioSrc}
+                  tabIndex={-1}
+                />
+              ) : null}
+
+              <div>
+                <p
+                  id={promptId}
+                  className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400"
+                >
+                  What does it mean?
+                </p>
+                <div
+                  role="radiogroup"
+                  aria-labelledby={promptId}
+                  className="mt-3 grid gap-2"
+                >
+                  {current.choices.map((text, i) => {
+                    const selected = picked[step] === i;
+                    return (
+                      <button
+                        key={`${current.wordId}-${i}`}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        onClick={() => selectChoice(i)}
+                        className={[
+                          "flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-950",
+                          selected
+                            ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950"
+                            : "border-zinc-200 bg-white hover:border-zinc-300 active:scale-[0.99] dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-zinc-600",
+                        ].join(" ")}
+                      >
+                        <span
+                          className={[
+                            "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg text-xs font-semibold tabular-nums",
+                            selected
+                              ? "bg-white/15 text-white ring-1 ring-white/25 dark:bg-zinc-900/10 dark:text-zinc-950 dark:ring-zinc-900/15"
+                              : "bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200/90 dark:bg-zinc-800 dark:text-zinc-200 dark:ring-zinc-600/80",
+                          ].join(" ")}
+                          aria-hidden
+                        >
+                          {i + 1}
+                        </span>
+                        <span
+                          className={[
+                            "min-w-0 flex-1 leading-relaxed",
+                            selected ? "text-white/95 dark:text-zinc-950" : "text-zinc-800 dark:text-zinc-100",
+                          ].join(" ")}
+                        >
+                          {text}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <button type="button" className={btnSecondary} onClick={prev} disabled={step <= 0}>
+              Back
+            </button>
+            <button
+              type="button"
+              className={btnPrimary}
+              onClick={nextOrFinish}
+              disabled={picked[step] === null}
+            >
+              {step >= total - 1 ? "See results" : "Next"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {!loading && !error && finished && score !== null ? (
+        <div className="mt-10 space-y-8">
+          <section className="rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-sm dark:border-zinc-800 dark:bg-zinc-950 sm:p-8">
+            <h2 className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Your score</h2>
+            <p className="mt-2 text-4xl font-semibold tabular-nums tracking-tight text-zinc-900 dark:text-zinc-50">
+              {score}
+              <span className="text-2xl font-normal text-zinc-500 dark:text-zinc-400">
+                {" "}
+                / {total}
+              </span>
+            </p>
+            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+              {total > 0 ? `${Math.round((score / total) * 100)}% correct` : ""}
+            </p>
+          </section>
+
+          <section className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950 sm:p-5">
+            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Review</h3>
+            <ul className="mt-3 divide-y divide-zinc-100 dark:divide-zinc-800">
+              {questions.map((q, i) => {
+                const chosen = picked[i];
+                const ok = chosen === q.answerIndex;
+                const skipped = chosen === null;
+                const correctText = q.choices[q.answerIndex];
+                return (
+                  <li key={q.wordId} className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <span className="font-medium text-zinc-900 dark:text-zinc-100">{q.term}</span>
+                      <span
+                        className={
+                          ok
+                            ? "text-sm font-medium text-emerald-700 dark:text-emerald-300"
+                            : skipped
+                              ? "text-sm font-medium text-zinc-500 dark:text-zinc-400"
+                              : "text-sm font-medium text-red-700 dark:text-red-300"
+                        }
+                      >
+                        {ok ? "Correct" : skipped ? "Skipped" : "Wrong"}
+                      </span>
+                    </div>
+                    {!ok ? (
+                      <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
+                        Correct answer:{" "}
+                        <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                          {correctText}
+                        </span>
+                      </p>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={btnPrimary} onClick={() => void loadQuiz()}>
+              Try again
+            </button>
+            <AppNavLink href="/app">Back to library</AppNavLink>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}

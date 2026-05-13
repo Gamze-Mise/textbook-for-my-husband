@@ -8,6 +8,7 @@ export async function proxy(req: NextRequest) {
   const isProtected =
     pathname.startsWith("/app") ||
     pathname.startsWith("/api/words") ||
+    pathname.startsWith("/api/quiz") ||
     pathname.startsWith("/api/audio");
 
   if (!isProtected) return NextResponse.next();
@@ -26,6 +27,11 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/app/:path*", "/api/words/:path*", "/api/audio/:path*"],
+  matcher: [
+    "/app/:path*",
+    "/api/words/:path*",
+    "/api/quiz",
+    "/api/quiz/:path*",
+    "/api/audio/:path*",
+  ],
 };
-

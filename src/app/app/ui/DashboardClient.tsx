@@ -3,25 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { signOut, useSession } from "next-auth/react";
 import ThemeToggle from "@/components/ThemeToggle";
+import IllustrationField from "@/components/IllustrationField";
+import { validateWordImageFile } from "@/lib/wordImageConstraints";
 import WordImage from "@/components/WordImage";
-import Link from "next/link";
 import LogoMark from "@/components/LogoMark";
-
-type Bucket = "KNOWN" | "TO_STUDY" | "FORGOTTEN" | "MIXED";
-
-type Word = {
-  id: string;
-  term: string;
-  meaning: string;
-  example: string | null;
-  bucket: "KNOWN" | "TO_STUDY" | "FORGOTTEN";
-  audioPublicId: string | null;
-  exampleAudioPublicId?: string | null;
-  audioSrc: string | null;
-  exampleAudioSrc?: string | null;
-  imagePublicId?: string | null;
-  imageSrc?: string | null;
-};
+import AlertBanner from "@/components/app/AlertBanner";
+import AppNavLink from "@/components/app/AppNavLink";
+import { type DeckTab, type WordCard, deckTabLabel } from "@/types/word";
 
 function textSizeForLength(args: {
   len: number;
@@ -34,23 +22,10 @@ function textSizeForLength(args: {
   return args.classes[0];
 }
 
-function label(b: Bucket) {
-  switch (b) {
-    case "KNOWN":
-      return "Known";
-    case "TO_STUDY":
-      return "Learning";
-    case "FORGOTTEN":
-      return "Needs review";
-    case "MIXED":
-      return "Mixed";
-  }
-}
-
 export default function DashboardClient() {
   const { data: session } = useSession();
-  const [active, setActive] = useState<Bucket>("MIXED");
-  const [words, setWords] = useState<Word[]>([]);
+  const [active, setActive] = useState<DeckTab>("MIXED");
+  const [words, setWords] = useState<WordCard[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +44,7 @@ export default function DashboardClient() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
-  const [editing, setEditing] = useState<Word | null>(null);
+  const [editing, setEditing] = useState<WordCard | null>(null);
   const [editTerm, setEditTerm] = useState("");
   const [editMeaning, setEditMeaning] = useState("");
   const [editExample, setEditExample] = useState("");
@@ -79,21 +54,21 @@ export default function DashboardClient() {
     null,
   );
   const editPreviewRef = useRef<string | null>(null);
+  const editImageRevertTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const [editImageClear, setEditImageClear] = useState(false);
-  const [deleting, setDeleting] = useState<Word | null>(null);
+  const [deleting, setDeleting] = useState<WordCard | null>(null);
   const [deletingNow, setDeletingNow] = useState(false);
 
-  const tabs: Bucket[] = useMemo(
-    () => ["MIXED", "FORGOTTEN", "KNOWN"],
-    [],
-  );
+  const tabs: DeckTab[] = useMemo(() => ["MIXED", "FORGOTTEN", "KNOWN"], []);
 
   async function load(opts?: { silent?: boolean }) {
     if (!opts?.silent) setLoading(true);
     setError(null);
     const res = await fetch(`/api/words?bucket=${active}&library=1`);
     const json = (await res.json().catch(() => null)) as
-      | { ok: true; words: Word[] }
+      | { ok: true; words: WordCard[] }
       | { error: string }
       | null;
 
@@ -160,12 +135,25 @@ export default function DashboardClient() {
     return () => {
       if (addPreviewRef.current) URL.revokeObjectURL(addPreviewRef.current);
       if (editPreviewRef.current) URL.revokeObjectURL(editPreviewRef.current);
+      if (editImageRevertTimerRef.current) {
+        clearTimeout(editImageRevertTimerRef.current);
+        editImageRevertTimerRef.current = null;
+      }
     };
   }, []);
 
+  useEffect(() => {
+    if (!editing && editImageRevertTimerRef.current) {
+      clearTimeout(editImageRevertTimerRef.current);
+      editImageRevertTimerRef.current = null;
+    }
+  }, [editing]);
+
   async function uploadWordImage(
     file: File,
-  ): Promise<{ ok: true; imagePublicId: string } | { ok: false; error: string }> {
+  ): Promise<
+    { ok: true; imagePublicId: string } | { ok: false; error: string }
+  > {
     const fd = new FormData();
     fd.append("file", file);
     const res = await fetch("/api/words/image", { method: "POST", body: fd });
@@ -265,6 +253,13 @@ export default function DashboardClient() {
 
     let imagePublicId: string | undefined;
     if (addImageFile) {
+      const invalid = validateWordImageFile(addImageFile);
+      if (invalid) {
+        setSaving(false);
+        setError(invalid);
+        setAddImagePickerFile(null);
+        return;
+      }
       const img = await uploadWordImage(addImageFile);
       if (!img.ok) {
         setSaving(false);
@@ -289,7 +284,7 @@ export default function DashboardClient() {
     });
 
     const json = (await res.json().catch(() => null)) as
-      | { ok: true; word: Word }
+      | { ok: true; word: WordCard }
       | { error: string }
       | null;
 
@@ -347,7 +342,11 @@ export default function DashboardClient() {
     await load();
   }
 
-  function openEdit(w: Word) {
+  function openEdit(w: WordCard) {
+    if (editImageRevertTimerRef.current) {
+      clearTimeout(editImageRevertTimerRef.current);
+      editImageRevertTimerRef.current = null;
+    }
     setEditing(w);
     setEditTerm(w.term);
     setEditMeaning(w.meaning);
@@ -359,6 +358,10 @@ export default function DashboardClient() {
 
   async function saveEdit() {
     if (!editing) return;
+    if (editImageRevertTimerRef.current) {
+      clearTimeout(editImageRevertTimerRef.current);
+      editImageRevertTimerRef.current = null;
+    }
     setSavingEdit(true);
     setError(null);
     setNotice(null);
@@ -388,7 +391,9 @@ export default function DashboardClient() {
         audioPublicId = ttsJson.audioPublicId;
       } else {
         audioPublicId = null;
-        setNotice("Term updated; pronunciation audio could not be regenerated.");
+        setNotice(
+          "Term updated; pronunciation audio could not be regenerated.",
+        );
       }
     }
 
@@ -396,10 +401,40 @@ export default function DashboardClient() {
     if (editImageClear && !editImageFile) {
       if (editing.imagePublicId) nextImagePublicId = null;
     } else if (editImageFile) {
+      const invalid = validateWordImageFile(editImageFile);
+      if (invalid) {
+        setSavingEdit(false);
+        const errMsg = invalid;
+        setError(errMsg);
+        setEditImagePickerFile(null);
+        if (editImageRevertTimerRef.current) {
+          clearTimeout(editImageRevertTimerRef.current);
+          editImageRevertTimerRef.current = null;
+        }
+        editImageRevertTimerRef.current = setTimeout(() => {
+          editImageRevertTimerRef.current = null;
+          setError((cur) => (cur === errMsg ? null : cur));
+        }, 3500);
+        return;
+      }
       const up = await uploadWordImage(editImageFile);
       if (!up.ok) {
         setSavingEdit(false);
-        setError(up.error);
+        const errMsg = up.error;
+        setError(errMsg);
+        const hadStoredIllustration =
+          Boolean(editing.imageSrc) && !editImageClear;
+        if (hadStoredIllustration) {
+          setEditImagePickerFile(null);
+          if (editImageRevertTimerRef.current) {
+            clearTimeout(editImageRevertTimerRef.current);
+            editImageRevertTimerRef.current = null;
+          }
+          editImageRevertTimerRef.current = setTimeout(() => {
+            editImageRevertTimerRef.current = null;
+            setError((cur) => (cur === errMsg ? null : cur));
+          }, 3500);
+        }
         return;
       }
       nextImagePublicId = up.imagePublicId;
@@ -415,9 +450,7 @@ export default function DashboardClient() {
         ...(editExample.trim() !== (editing.example ?? "").trim()
           ? { exampleAudioPublicId: null }
           : {}),
-        ...(audioPublicId !== editing.audioPublicId
-          ? { audioPublicId }
-          : {}),
+        ...(audioPublicId !== editing.audioPublicId ? { audioPublicId } : {}),
         ...(nextImagePublicId !== undefined
           ? { imagePublicId: nextImagePublicId }
           : {}),
@@ -438,7 +471,10 @@ export default function DashboardClient() {
 
     const exampleChanged =
       editExample.trim() !== (editing.example ?? "").trim();
-    if (editExample.trim() && (exampleChanged || !editing.exampleAudioPublicId)) {
+    if (
+      editExample.trim() &&
+      (exampleChanged || !editing.exampleAudioPublicId)
+    ) {
       const ex = await persistExampleAudio(editing.id, editExample);
       if (!ex.ok) setNotice(ex.error);
     }
@@ -455,9 +491,9 @@ export default function DashboardClient() {
     setError(null);
     setNotice(null);
 
-    const res = await fetch(`/api/words/${deleting.id}`, { method: "DELETE" }).catch(
-      () => null,
-    );
+    const res = await fetch(`/api/words/${deleting.id}`, {
+      method: "DELETE",
+    }).catch(() => null);
     setDeletingNow(false);
 
     if (!res || !res.ok) {
@@ -512,12 +548,8 @@ export default function DashboardClient() {
           >
             + Add word
           </button>
-          <Link
-            href="/app/study"
-            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium dark:border-zinc-800 dark:bg-zinc-950"
-          >
-            Study mode
-          </Link>
+          <AppNavLink href="/app/study">Study</AppNavLink>
+          <AppNavLink href="/app/quiz">Quiz</AppNavLink>
 
           <div className="relative" ref={menuRef}>
             <button
@@ -534,7 +566,9 @@ export default function DashboardClient() {
                   <div className="text-xs text-zinc-600 dark:text-zinc-400">
                     Signed in as
                   </div>
-                  <div className="truncate text-sm font-medium">{userEmail}</div>
+                  <div className="truncate text-sm font-medium">
+                    {userEmail}
+                  </div>
                 </div>
                 <div className="px-2 py-2">
                   <ThemeToggle />
@@ -563,7 +597,7 @@ export default function DashboardClient() {
                 : "border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950",
             ].join(" ")}
           >
-            {label(t)}
+            {deckTabLabel(t)}
           </button>
         ))}
         <div className="ml-auto w-full sm:w-auto sm:min-w-72">
@@ -576,21 +610,23 @@ export default function DashboardClient() {
         </div>
       </div>
 
-      {error ? (
-        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-100">
-          {error}
+      {error && !showAdd && !editing && !deleting ? (
+        <div className="mt-4">
+          <AlertBanner variant="error">{error}</AlertBanner>
         </div>
       ) : null}
 
       {notice ? (
-        <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-100">
-          {notice}
+        <div className="mt-4">
+          <AlertBanner variant="success">{notice}</AlertBanner>
         </div>
       ) : null}
 
       <main className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {loading ? (
-          <div className="text-sm text-zinc-600 dark:text-zinc-400">Loading...</div>
+          <div className="text-sm text-zinc-600 dark:text-zinc-400">
+            Loading...
+          </div>
         ) : filtered.length ? (
           filtered.map((w) => (
             <Flashcard
@@ -612,127 +648,97 @@ export default function DashboardClient() {
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40">
           <div className="flex min-h-full items-center justify-center p-4 sm:p-6">
             <div className="relative w-full max-w-xl max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="text-lg font-semibold">Add a new card</div>
-                <div className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                  Front: word + audio. Back: meaning + example.
-                </div>
-              </div>
-              <button
-                className="rounded-lg px-2 py-1 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
-                onClick={() => {
-                  setShowAdd(false);
-                  setAddImagePickerFile(null);
-                }}
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              <label className="block text-sm">
-                <span className="text-zinc-700 dark:text-zinc-300">Word</span>
-                <input
-                  className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950"
-                  value={term}
-                  onChange={(e) => setTerm(e.target.value)}
-                  maxLength={64}
-                  placeholder="e.g. curious"
-                />
-              </label>
-              <label className="block text-sm">
-                <span className="text-zinc-700 dark:text-zinc-300">Meaning</span>
-                <textarea
-                  className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950"
-                  value={meaning}
-                  onChange={(e) => setMeaning(e.target.value)}
-                  maxLength={400}
-                  rows={3}
-                />
-              </label>
-
-              <div className="block text-sm">
-                <span className="text-zinc-700 dark:text-zinc-300">
-                  Illustration{" "}
-                  <span className="font-normal text-zinc-500 dark:text-zinc-400">
-                    (optional)
-                  </span>
-                </span>
-                <div className="mt-2 overflow-hidden rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/80 dark:border-zinc-600 dark:bg-zinc-900/40">
-                  <div className="relative aspect-[16/10] w-full bg-zinc-100 dark:bg-zinc-900/80">
-                    <WordImage
-                      src={addImagePreviewUrl}
-                      alt=""
-                      className="absolute inset-0 size-full object-cover"
-                    />
-                  </div>
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-200/80 p-3 dark:border-zinc-800/80">
-                    <p className="text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
-                      JPEG, PNG, or WebP · max 2&nbsp;MB. Shown on the card front;
-                      if missing or broken, a default graphic is used.
-                    </p>
-                    <div className="flex shrink-0 gap-2">
-                      <label className="cursor-pointer rounded-xl bg-zinc-900 px-3 py-2 text-xs font-medium text-white dark:bg-zinc-100 dark:text-zinc-950">
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp"
-                          className="sr-only"
-                          disabled={saving}
-                          onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            if (f) setAddImagePickerFile(f);
-                            e.target.value = "";
-                          }}
-                        />
-                        Choose file
-                      </label>
-                      {addImageFile ? (
-                        <button
-                          type="button"
-                          className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-medium dark:border-zinc-800 dark:bg-zinc-950"
-                          disabled={saving}
-                          onClick={() => setAddImagePickerFile(null)}
-                        >
-                          Remove
-                        </button>
-                      ) : null}
-                    </div>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-lg font-semibold">Add a new card</div>
+                  <div className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                    Front: word + audio. Back: meaning + example.
                   </div>
                 </div>
-              </div>
-
-              <label className="block text-sm">
-                <span className="text-zinc-700 dark:text-zinc-300">Example</span>
-                <textarea
-                  className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950"
-                  value={example}
-                  onChange={(e) => setExample(e.target.value)}
-                  maxLength={600}
-                  rows={2}
-                />
-              </label>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
                 <button
-                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium dark:border-zinc-800 dark:bg-zinc-950"
+                  className="rounded-lg px-2 py-1 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
                   onClick={() => {
                     setShowAdd(false);
                     setAddImagePickerFile(null);
                   }}
-                  disabled={saving}
                 >
-                  Cancel
-                </button>
-                <button
-                  className="rounded-xl bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-950"
-                  onClick={createWord}
-                  disabled={saving || !term.trim() || !meaning.trim()}
-                >
-                  {saving ? "Saving..." : "Save"}
+                  Close
                 </button>
               </div>
-            </div>
+
+              <div className="mt-4 space-y-3">
+                <label className="block text-sm">
+                  <span className="text-zinc-700 dark:text-zinc-300">Word</span>
+                  <input
+                    className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950"
+                    value={term}
+                    onChange={(e) => setTerm(e.target.value)}
+                    maxLength={64}
+                    placeholder="e.g. curious"
+                  />
+                </label>
+                <label className="block text-sm">
+                  <span className="text-zinc-700 dark:text-zinc-300">
+                    Meaning
+                  </span>
+                  <textarea
+                    className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950"
+                    value={meaning}
+                    onChange={(e) => setMeaning(e.target.value)}
+                    maxLength={400}
+                    rows={3}
+                  />
+                </label>
+
+                <IllustrationField
+                  fieldId="add-card-illustration"
+                  title="Card illustration"
+                  description="Appears on the front of the flashcard in study mode. You can skip this—a default graphic is used instead."
+                  previewSrc={addImagePreviewUrl}
+                  disabled={saving}
+                  uploading={Boolean(saving && addImageFile)}
+                  error={error}
+                  primaryLabel={
+                    addImagePreviewUrl ? "Change image" : "Add image"
+                  }
+                  showClear={Boolean(addImagePreviewUrl)}
+                  onSelectFile={(f) => setAddImagePickerFile(f)}
+                  onClear={() => setAddImagePickerFile(null)}
+                />
+
+                <label className="block text-sm">
+                  <span className="text-zinc-700 dark:text-zinc-300">
+                    Example
+                  </span>
+                  <textarea
+                    className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950"
+                    value={example}
+                    onChange={(e) => setExample(e.target.value)}
+                    maxLength={600}
+                    rows={2}
+                  />
+                </label>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium dark:border-zinc-800 dark:bg-zinc-950"
+                    onClick={() => {
+                      setShowAdd(false);
+                      setAddImagePickerFile(null);
+                    }}
+                    disabled={saving}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="rounded-xl bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-950"
+                    onClick={createWord}
+                    disabled={saving || !term.trim() || !meaning.trim()}
+                  >
+                    {saving ? "Saving..." : "Save"}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -742,138 +748,115 @@ export default function DashboardClient() {
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40">
           <div className="flex min-h-full items-center justify-center p-4 sm:p-6">
             <div className="relative w-full max-w-xl max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="text-lg font-semibold">Edit card</div>
-                <div className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                  Changing the word regenerates pronunciation audio when possible.
-                </div>
-              </div>
-              <button
-                className="rounded-lg px-2 py-1 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
-                onClick={() => {
-                  setEditing(null);
-                  setEditImagePickerFile(null);
-                  setEditImageClear(false);
-                }}
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              <label className="block text-sm">
-                <span className="text-zinc-700 dark:text-zinc-300">Word</span>
-                <input
-                  className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950"
-                  value={editTerm}
-                  onChange={(e) => setEditTerm(e.target.value)}
-                  maxLength={64}
-                />
-              </label>
-              <label className="block text-sm">
-                <span className="text-zinc-700 dark:text-zinc-300">Meaning</span>
-                <textarea
-                  className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950"
-                  value={editMeaning}
-                  onChange={(e) => setEditMeaning(e.target.value)}
-                  maxLength={400}
-                  rows={3}
-                />
-              </label>
-
-              <div className="block text-sm">
-                <span className="text-zinc-700 dark:text-zinc-300">
-                  Illustration{" "}
-                  <span className="font-normal text-zinc-500 dark:text-zinc-400">
-                    (optional)
-                  </span>
-                </span>
-                <div className="mt-2 overflow-hidden rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/80 dark:border-zinc-600 dark:bg-zinc-900/40">
-                  <div className="relative aspect-[16/10] w-full bg-zinc-100 dark:bg-zinc-900/80">
-                    <WordImage
-                      src={
-                        editImagePreviewUrl ||
-                        (!editImageClear ? editing.imageSrc : null)
-                      }
-                      alt=""
-                      className="absolute inset-0 size-full object-cover"
-                    />
-                  </div>
-                  <div className="space-y-2 border-t border-zinc-200/80 p-3 dark:border-zinc-800/80">
-                    {editImageClear && editing.imagePublicId ? (
-                      <p className="text-xs text-amber-800 dark:text-amber-200/90">
-                        Illustration will be removed when you save.
-                      </p>
-                    ) : null}
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
-                        JPEG, PNG, or WebP · max 2&nbsp;MB.
-                      </p>
-                      <div className="flex shrink-0 gap-2">
-                        <label className="cursor-pointer rounded-xl bg-zinc-900 px-3 py-2 text-xs font-medium text-white dark:bg-zinc-100 dark:text-zinc-950">
-                          <input
-                            type="file"
-                            accept="image/jpeg,image/png,image/webp"
-                            className="sr-only"
-                            disabled={savingEdit}
-                            onChange={(e) => {
-                              const f = e.target.files?.[0];
-                              if (f) setEditImagePickerFile(f);
-                              e.target.value = "";
-                            }}
-                          />
-                          Replace
-                        </label>
-                        {editImageFile ||
-                        (editing.imageSrc && !editImageClear) ? (
-                          <button
-                            type="button"
-                            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-medium dark:border-zinc-800 dark:bg-zinc-950"
-                            disabled={savingEdit}
-                            onClick={() => clearEditWordImage()}
-                          >
-                            Remove
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-lg font-semibold">Edit card</div>
+                  <div className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                    Changing the word regenerates pronunciation audio when
+                    possible.
                   </div>
                 </div>
-              </div>
-
-              <label className="block text-sm">
-                <span className="text-zinc-700 dark:text-zinc-300">Example</span>
-                <textarea
-                  className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950"
-                  value={editExample}
-                  onChange={(e) => setEditExample(e.target.value)}
-                  maxLength={600}
-                  rows={2}
-                />
-              </label>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
                 <button
-                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium dark:border-zinc-800 dark:bg-zinc-950"
+                  className="rounded-lg px-2 py-1 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
                   onClick={() => {
                     setEditing(null);
                     setEditImagePickerFile(null);
                     setEditImageClear(false);
                   }}
-                  disabled={savingEdit}
                 >
-                  Cancel
-                </button>
-                <button
-                  className="rounded-xl bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-950"
-                  onClick={() => void saveEdit()}
-                  disabled={savingEdit || !editTerm.trim() || !editMeaning.trim()}
-                >
-                  {savingEdit ? "Saving..." : "Save changes"}
+                  Close
                 </button>
               </div>
-            </div>
+
+              <div className="mt-4 space-y-3">
+                <label className="block text-sm">
+                  <span className="text-zinc-700 dark:text-zinc-300">Word</span>
+                  <input
+                    className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950"
+                    value={editTerm}
+                    onChange={(e) => setEditTerm(e.target.value)}
+                    maxLength={64}
+                  />
+                </label>
+                <label className="block text-sm">
+                  <span className="text-zinc-700 dark:text-zinc-300">
+                    Meaning
+                  </span>
+                  <textarea
+                    className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950"
+                    value={editMeaning}
+                    onChange={(e) => setEditMeaning(e.target.value)}
+                    maxLength={400}
+                    rows={3}
+                  />
+                </label>
+
+                <IllustrationField
+                  fieldId="edit-card-illustration"
+                  title="Card illustration"
+                  description="Shown on the card front when you study. Replace or remove anytime before saving."
+                  previewSrc={
+                    (editImagePreviewUrl ||
+                      (!editImageClear ? editing.imageSrc : null)) ??
+                    null
+                  }
+                  disabled={savingEdit}
+                  uploading={Boolean(savingEdit && editImageFile)}
+                  error={error}
+                  notice={
+                    editImageClear && editing.imagePublicId
+                      ? "This illustration will be removed when you save."
+                      : undefined
+                  }
+                  primaryLabel={
+                    editImagePreviewUrl || (!editImageClear && editing.imageSrc)
+                      ? "Replace"
+                      : "Add image"
+                  }
+                  showClear={Boolean(
+                    editImagePreviewUrl ||
+                    (editing.imageSrc && !editImageClear),
+                  )}
+                  onSelectFile={(f) => setEditImagePickerFile(f)}
+                  onClear={() => clearEditWordImage()}
+                />
+
+                <label className="block text-sm">
+                  <span className="text-zinc-700 dark:text-zinc-300">
+                    Example
+                  </span>
+                  <textarea
+                    className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950"
+                    value={editExample}
+                    onChange={(e) => setEditExample(e.target.value)}
+                    maxLength={600}
+                    rows={2}
+                  />
+                </label>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium dark:border-zinc-800 dark:bg-zinc-950"
+                    onClick={() => {
+                      setEditing(null);
+                      setEditImagePickerFile(null);
+                      setEditImageClear(false);
+                    }}
+                    disabled={savingEdit}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="rounded-xl bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-950"
+                    onClick={() => void saveEdit()}
+                    disabled={
+                      savingEdit || !editTerm.trim() || !editMeaning.trim()
+                    }
+                  >
+                    {savingEdit ? "Saving..." : "Save changes"}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -883,44 +866,50 @@ export default function DashboardClient() {
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40">
           <div className="flex min-h-full items-center justify-center p-4 sm:p-6">
             <div className="relative w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-5 shadow-lg dark:border-zinc-800 dark:bg-zinc-950">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="text-lg font-semibold">Delete card?</div>
-                <div className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                  This action can&apos;t be undone.
-                </div>
-                <div className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm dark:border-zinc-800 dark:bg-zinc-900/40">
-                  <div className="font-medium">{deleting.term}</div>
-                  <div className="mt-1 line-clamp-2 text-zinc-700 dark:text-zinc-300">
-                    {deleting.meaning}
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-lg font-semibold">Delete card?</div>
+                  <div className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                    This action can&apos;t be undone.
+                  </div>
+                  <div className="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm dark:border-zinc-800 dark:bg-zinc-900/40">
+                    <div className="font-medium">{deleting.term}</div>
+                    <div className="mt-1 line-clamp-2 text-zinc-700 dark:text-zinc-300">
+                      {deleting.meaning}
+                    </div>
                   </div>
                 </div>
+                <button
+                  className="rounded-lg px-2 py-1 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                  onClick={() => setDeleting(null)}
+                  disabled={deletingNow}
+                >
+                  Close
+                </button>
               </div>
-              <button
-                className="rounded-lg px-2 py-1 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
-                onClick={() => setDeleting(null)}
-                disabled={deletingNow}
-              >
-                Close
-              </button>
-            </div>
 
-            <div className="mt-4 flex items-center justify-end gap-2">
-              <button
-                className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium dark:border-zinc-800 dark:bg-zinc-950"
-                onClick={() => setDeleting(null)}
-                disabled={deletingNow}
-              >
-                Cancel
-              </button>
-              <button
-                className="rounded-xl bg-red-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
-                onClick={() => void confirmDelete()}
-                disabled={deletingNow}
-              >
-                {deletingNow ? "Deleting..." : "Delete"}
-              </button>
-            </div>
+              {error ? (
+                <AlertBanner variant="error" className="mt-4 rounded-xl p-3">
+                  {error}
+                </AlertBanner>
+              ) : null}
+
+              <div className="mt-4 flex items-center justify-end gap-2">
+                <button
+                  className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium dark:border-zinc-800 dark:bg-zinc-950"
+                  onClick={() => setDeleting(null)}
+                  disabled={deletingNow}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="rounded-xl bg-red-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+                  onClick={() => void confirmDelete()}
+                  disabled={deletingNow}
+                >
+                  {deletingNow ? "Deleting..." : "Delete"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -935,10 +924,10 @@ function Flashcard({
   onEdit,
   onDelete,
 }: {
-  word: Word;
+  word: WordCard;
   onChanged: () => void;
-  onEdit: (w: Word) => void;
-  onDelete: (w: Word) => void;
+  onEdit: (w: WordCard) => void;
+  onDelete: (w: WordCard) => void;
 }) {
   function mark(bucket: "KNOWN" | "FORGOTTEN") {
     void fetch(`/api/words/${word.id}`, {
@@ -1002,8 +991,19 @@ function Flashcard({
         aria-label="Edit card"
         title="Edit"
       >
-        <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-          <path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" strokeLinecap="round" strokeLinejoin="round" />
+        <svg
+          className="size-4"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          aria-hidden
+        >
+          <path
+            d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
       </button>
       <button
@@ -1016,17 +1016,26 @@ function Flashcard({
         aria-label="Delete card"
         title="Delete"
       >
-        <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-          <path d="M3 6h18M8 6V4h8v2m-1 0v14a1 1 0 01-1 1H9a1 1 0 01-1-1V6h8zM10 11v6M14 11v6" strokeLinecap="round" strokeLinejoin="round" />
+        <svg
+          className="size-4"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          aria-hidden
+        >
+          <path
+            d="M3 6h18M8 6V4h8v2m-1 0v14a1 1 0 01-1 1H9a1 1 0 01-1-1V6h8zM10 11v6M14 11v6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
       </button>
     </div>
   );
 
   return (
-    <div
-      className="group rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950"
-    >
+    <div className="group rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950">
       <div className="flex min-h-88 flex-col">
         <div className="overflow-hidden rounded-xl ring-1 ring-zinc-200/80 dark:ring-zinc-800">
           <WordImage
@@ -1038,7 +1047,9 @@ function Flashcard({
 
         <div className="mt-3 flex items-start justify-between gap-3">
           <div className="w-full min-w-0">
-            <div className={[termSize, "font-semibold tracking-tight"].join(" ")}>
+            <div
+              className={[termSize, "font-semibold tracking-tight"].join(" ")}
+            >
               {word.term}
             </div>
           </div>
@@ -1083,4 +1094,3 @@ function Flashcard({
     </div>
   );
 }
-
