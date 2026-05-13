@@ -16,6 +16,11 @@ export type WordCard = {
   exampleAudioSrc?: string | null;
   imagePublicId?: string | null;
   imageSrc?: string | null;
+  /** 0–100, null = center. */
+  imageFocusX?: number | null;
+  imageFocusY?: number | null;
+  /** CSS object-position for cropped illustrations. */
+  imageObjectPosition?: string;
 };
 
 export const STUDY_DECK_TABS: DeckTab[] = ["MIXED", "FORGOTTEN", "KNOWN"];

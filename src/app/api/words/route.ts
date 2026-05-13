@@ -13,6 +13,8 @@ const createSchema = z.object({
   audioPublicId: z.string().optional(),
   exampleAudioPublicId: z.string().optional(),
   imagePublicId: z.string().optional(),
+  imageFocusX: z.number().int().min(0).max(100).optional(),
+  imageFocusY: z.number().int().min(0).max(100).optional(),
 });
 
 function pickMixed<T>(args: { forgotten: T[]; toStudy: T[]; known: T[] }) {
@@ -125,6 +127,12 @@ export async function POST(req: Request) {
         audioPublicId: parsed.data.audioPublicId,
         exampleAudioPublicId: parsed.data.exampleAudioPublicId,
         imagePublicId: parsed.data.imagePublicId,
+        imageFocusX: parsed.data.imagePublicId
+          ? (parsed.data.imageFocusX ?? null)
+          : null,
+        imageFocusY: parsed.data.imagePublicId
+          ? (parsed.data.imageFocusY ?? null)
+          : null,
       },
     });
     return NextResponse.json({ ok: true, word: wordToClient(word) });

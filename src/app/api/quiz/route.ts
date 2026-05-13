@@ -1,11 +1,36 @@
 import { NextResponse } from "next/server";
+import type { WordBucket } from "@prisma/client";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { wordToClient } from "@/lib/wordSerialize";
 import type { QuizQuestion } from "@/types/quiz";
 
-const TARGET_QUESTIONS = 10;
+const TARGET_QUESTIONS = 20;
+
+/** Higher = more likely to appear early in the quiz (Again/Forgotten prioritized). */
+function bucketWeight(bucket: WordBucket): number {
+  switch (bucket) {
+    case "FORGOTTEN":
+      return 8;
+    case "TO_STUDY":
+      return 2.5;
+    case "KNOWN":
+      return 1;
+    default:
+      return 1;
+  }
+}
+
+function weightedShuffle<T extends { bucket: WordBucket }>(items: T[]): T[] {
+  return [...items]
+    .map((item) => ({
+      item,
+      score: -Math.log(Math.random() + Number.EPSILON) / bucketWeight(item.bucket),
+    }))
+    .sort((a, b) => b.score - a.score)
+    .map(({ item }) => item);
+}
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -38,7 +63,7 @@ export async function GET() {
     );
   }
 
-  const order = shuffle(words);
+  const order = weightedShuffle(words);
   const questions: QuizQuestion[] = [];
 
   for (const w of order) {
@@ -71,6 +96,8 @@ export async function GET() {
       term: c.term,
       imageSrc: c.imageSrc,
       audioSrc: c.audioSrc,
+      example: c.example,
+      imageObjectPosition: c.imageObjectPosition,
       choices,
       answerIndex,
     });

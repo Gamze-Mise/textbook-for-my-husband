@@ -21,6 +21,8 @@ const patchSchema = z.object({
   audioPublicId: z.string().nullable().optional(),
   exampleAudioPublicId: z.string().nullable().optional(),
   imagePublicId: z.string().nullable().optional(),
+  imageFocusX: z.number().int().min(0).max(100).nullable().optional(),
+  imageFocusY: z.number().int().min(0).max(100).nullable().optional(),
 });
 
 export async function PATCH(
@@ -78,7 +80,19 @@ export async function PATCH(
     if (p.imagePublicId !== undefined) {
       if (!sameNullableString(p.imagePublicId, word.imagePublicId)) {
         data.imagePublicId = p.imagePublicId;
+        if (p.imagePublicId === null) {
+          data.imageFocusX = null;
+          data.imageFocusY = null;
+        }
       }
+    }
+    if (p.imageFocusX !== undefined) {
+      const next = p.imageFocusX;
+      if (next !== word.imageFocusX) data.imageFocusX = next;
+    }
+    if (p.imageFocusY !== undefined) {
+      const next = p.imageFocusY;
+      if (next !== word.imageFocusY) data.imageFocusY = next;
     }
 
     const updated =

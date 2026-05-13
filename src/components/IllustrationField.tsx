@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import WordImage from "@/components/WordImage";
 import { validateWordImageFile, WORD_IMAGE_ACCEPT_ATTR } from "@/lib/wordImageConstraints";
+import {
+  DEFAULT_IMAGE_FOCUS,
+  clampImageFocus,
+  objectPositionFromFocus,
+} from "@/lib/wordImageFocus";
 
 function ImageIcon({ className }: { className?: string }) {
   return (
@@ -24,11 +29,14 @@ function ImageIcon({ className }: { className?: string }) {
 }
 
 const LOCAL_ERROR_MS = 3500;
+/** Drag distance vs frame size → object-position change. */
+const PAN_SENSITIVITY = 0.55;
 
 export type IllustrationFieldProps = {
   fieldId: string;
   title: string;
-  description: string;
+  /** Subtitle under the title; omit or pass empty to hide. */
+  description?: string;
   previewSrc: string | null;
   disabled: boolean;
   uploading: boolean;
@@ -38,6 +46,10 @@ export type IllustrationFieldProps = {
   showClear: boolean;
   onSelectFile: (file: File) => void;
   onClear?: () => void;
+  /** When set, preview becomes draggable to set crop focal point (saved with the card). */
+  imageFocusX?: number;
+  imageFocusY?: number;
+  onImageFocusChange?: (next: { x: number; y: number }) => void;
 };
 
 export default function IllustrationField({
@@ -53,6 +65,9 @@ export default function IllustrationField({
   showClear,
   onSelectFile,
   onClear,
+  imageFocusX = DEFAULT_IMAGE_FOCUS,
+  imageFocusY = DEFAULT_IMAGE_FOCUS,
+  onImageFocusChange,
 }: IllustrationFieldProps) {
   const reactId = useId();
   const labelId = `${fieldId}-${reactId}-label`;
@@ -62,9 +77,20 @@ export default function IllustrationField({
   const [dragOver, setDragOver] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const localErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const panRef = useRef<{
+    pointerId: number;
+    startClientX: number;
+    startClientY: number;
+    startFx: number;
+    startFy: number;
+  } | null>(null);
+  const [panning, setPanning] = useState(false);
 
   const hasPreview = Boolean((previewSrc ?? "").trim());
   const displayError = localError || error;
+  const previewObjectPosition = objectPositionFromFocus(imageFocusX, imageFocusY);
+  const showFraming = hasPreview && Boolean(onImageFocusChange);
 
   const clearLocalErrorTimer = useCallback(() => {
     if (localErrorTimerRef.current) {
@@ -122,6 +148,70 @@ export default function IllustrationField({
     }
   }, []);
 
+  const onPanPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (disabled || !onImageFocusChange || uploading || localError) return;
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      panRef.current = {
+        pointerId: e.pointerId,
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        startFx: clampImageFocus(imageFocusX),
+        startFy: clampImageFocus(imageFocusY),
+      };
+      setPanning(true);
+    },
+    [
+      disabled,
+      imageFocusX,
+      imageFocusY,
+      localError,
+      onImageFocusChange,
+      uploading,
+    ],
+  );
+
+  const onPanPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      const pan = panRef.current;
+      if (!pan || pan.pointerId !== e.pointerId) return;
+      const el = frameRef.current;
+      if (!el) return;
+      const w = el.clientWidth || 1;
+      const h = el.clientHeight || 1;
+      const dx = e.clientX - pan.startClientX;
+      const dy = e.clientY - pan.startClientY;
+      const nextX = clampImageFocus(
+        pan.startFx - (dx / w) * 100 * PAN_SENSITIVITY,
+      );
+      const nextY = clampImageFocus(
+        pan.startFy - (dy / h) * 100 * PAN_SENSITIVITY,
+      );
+      onImageFocusChange?.({ x: nextX, y: nextY });
+    },
+    [onImageFocusChange],
+  );
+
+  const endPan = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const pan = panRef.current;
+    if (!pan || pan.pointerId !== e.pointerId) return;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* already released */
+    }
+    panRef.current = null;
+    setPanning(false);
+  }, []);
+
+  const onPanLostCapture = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (panRef.current?.pointerId !== e.pointerId) return;
+    panRef.current = null;
+    setPanning(false);
+  }, []);
+
   const shellClass = [
     "overflow-hidden rounded-2xl border transition-[border-color,box-shadow,background-color]",
     displayError
@@ -139,7 +229,9 @@ export default function IllustrationField({
       role="group"
       aria-labelledby={labelId}
       aria-describedby={
-        [hintId, displayError ? errorId : null].filter(Boolean).join(" ") || undefined
+        [description?.trim() ? hintId : null, displayError ? errorId : null]
+          .filter(Boolean)
+          .join(" ") || undefined
       }
     >
       <div className="flex items-start justify-between gap-3">
@@ -150,12 +242,14 @@ export default function IllustrationField({
           >
             {title}
           </div>
-          <p
-            id={hintId}
-            className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400"
-          >
-            {description}
-          </p>
+          {description?.trim() ? (
+            <p
+              id={hintId}
+              className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400"
+            >
+              {description}
+            </p>
+          ) : null}
         </div>
         <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
           Optional
@@ -172,11 +266,30 @@ export default function IllustrationField({
           <>
             <div className="p-2 sm:p-2.5">
               <div className="relative overflow-hidden rounded-xl bg-zinc-100 ring-1 ring-black/4 dark:bg-zinc-950 dark:ring-white/10">
-                <div className="relative aspect-16/10 w-full">
+                <div
+                  ref={frameRef}
+                  onPointerDown={showFraming ? onPanPointerDown : undefined}
+                  onPointerMove={showFraming ? onPanPointerMove : undefined}
+                  onPointerUp={showFraming ? endPan : undefined}
+                  onPointerCancel={showFraming ? endPan : undefined}
+                  onLostPointerCapture={showFraming ? onPanLostCapture : undefined}
+                  className={[
+                    "relative aspect-16/10 w-full overflow-hidden",
+                    showFraming && !disabled && !uploading && !localError
+                      ? [
+                          "touch-none select-none",
+                          panning
+                            ? "cursor-grabbing"
+                            : "cursor-grab active:cursor-grabbing",
+                        ].join(" ")
+                      : "",
+                  ].join(" ")}
+                >
                   <WordImage
                     src={previewSrc}
                     alt=""
-                    className="absolute inset-0 size-full object-cover"
+                    objectPosition={previewObjectPosition}
+                    className="pointer-events-none absolute inset-0 size-full object-cover"
                   />
                   {localError ? (
                     <div

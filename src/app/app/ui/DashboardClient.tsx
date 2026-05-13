@@ -5,6 +5,7 @@ import { signOut, useSession } from "next-auth/react";
 import ThemeToggle from "@/components/ThemeToggle";
 import IllustrationField from "@/components/IllustrationField";
 import { validateWordImageFile } from "@/lib/wordImageConstraints";
+import { clampImageFocus } from "@/lib/wordImageFocus";
 import WordImage from "@/components/WordImage";
 import LogoMark from "@/components/LogoMark";
 import AlertBanner from "@/components/app/AlertBanner";
@@ -41,6 +42,8 @@ export default function DashboardClient() {
     null,
   );
   const addPreviewRef = useRef<string | null>(null);
+  const [addImageFocusX, setAddImageFocusX] = useState(50);
+  const [addImageFocusY, setAddImageFocusY] = useState(50);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
@@ -57,6 +60,8 @@ export default function DashboardClient() {
   const editImageRevertTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const [editImageFocusX, setEditImageFocusX] = useState(50);
+  const [editImageFocusY, setEditImageFocusY] = useState(50);
   const [editImageClear, setEditImageClear] = useState(false);
   const [deleting, setDeleting] = useState<WordCard | null>(null);
   const [deletingNow, setDeletingNow] = useState(false);
@@ -279,7 +284,12 @@ export default function DashboardClient() {
         // New words always start in "Needs review"
         bucket: "FORGOTTEN",
         audioPublicId,
-        ...(imagePublicId ? { imagePublicId } : {}),
+        ...(imagePublicId
+          ? {
+              imageFocusX: clampImageFocus(addImageFocusX),
+              imageFocusY: clampImageFocus(addImageFocusY),
+            }
+          : {}),
       }),
     });
 
@@ -351,6 +361,8 @@ export default function DashboardClient() {
     setEditTerm(w.term);
     setEditMeaning(w.meaning);
     setEditExample(w.example ?? "");
+    setEditImageFocusX(w.imageFocusX ?? 50);
+    setEditImageFocusY(w.imageFocusY ?? 50);
     setEditImagePickerFile(null);
     setEditImageClear(false);
     setError(null);
@@ -440,6 +452,11 @@ export default function DashboardClient() {
       nextImagePublicId = up.imagePublicId;
     }
 
+    const orClearImage = editImageClear && !editImageFile && editing.imagePublicId;
+    const hasIllustration =
+      (!editImageClear && Boolean(editing.imagePublicId || editing.imageSrc)) ||
+      Boolean(editImageFile || editImagePreviewUrl);
+
     const res = await fetch(`/api/words/${editing.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -453,6 +470,12 @@ export default function DashboardClient() {
         ...(audioPublicId !== editing.audioPublicId ? { audioPublicId } : {}),
         ...(nextImagePublicId !== undefined
           ? { imagePublicId: nextImagePublicId }
+          : {}),
+        ...(hasIllustration && !orClearImage
+          ? {
+              imageFocusX: clampImageFocus(editImageFocusX),
+              imageFocusY: clampImageFocus(editImageFocusY),
+            }
           : {}),
       }),
     });
@@ -542,6 +565,8 @@ export default function DashboardClient() {
               setMeaning("");
               setExample("");
               setAddImagePickerFile(null);
+              setAddImageFocusX(50);
+              setAddImageFocusY(50);
               setShowAdd(true);
             }}
             className="rounded-xl bg-zinc-900 px-3 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-950"
@@ -704,6 +729,12 @@ export default function DashboardClient() {
                   showClear={Boolean(addImagePreviewUrl)}
                   onSelectFile={(f) => setAddImagePickerFile(f)}
                   onClear={() => setAddImagePickerFile(null)}
+                  imageFocusX={addImageFocusX}
+                  imageFocusY={addImageFocusY}
+                  onImageFocusChange={({ x, y }) => {
+                    setAddImageFocusX(x);
+                    setAddImageFocusY(y);
+                  }}
                 />
 
                 <label className="block text-sm">
@@ -794,7 +825,6 @@ export default function DashboardClient() {
                 <IllustrationField
                   fieldId="edit-card-illustration"
                   title="Card illustration"
-                  description="Shown on the card front when you study. Replace or remove anytime before saving."
                   previewSrc={
                     (editImagePreviewUrl ||
                       (!editImageClear ? editing.imageSrc : null)) ??
@@ -819,6 +849,12 @@ export default function DashboardClient() {
                   )}
                   onSelectFile={(f) => setEditImagePickerFile(f)}
                   onClear={() => clearEditWordImage()}
+                  imageFocusX={editImageFocusX}
+                  imageFocusY={editImageFocusY}
+                  onImageFocusChange={({ x, y }) => {
+                    setEditImageFocusX(x);
+                    setEditImageFocusY(y);
+                  }}
                 />
 
                 <label className="block text-sm">
@@ -1041,6 +1077,7 @@ function Flashcard({
           <WordImage
             src={word.imageSrc}
             alt=""
+            objectPosition={word.imageObjectPosition}
             className="aspect-[16/10] w-full object-cover"
           />
         </div>

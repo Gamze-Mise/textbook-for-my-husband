@@ -3,6 +3,7 @@ import {
   cloudinaryImageDeliveryUrl,
   cloudinaryVideoDeliveryUrl,
 } from "@/lib/cloudinaryDelivery";
+import { objectPositionFromFocus } from "@/lib/wordImageFocus";
 
 /** API/client payload: only Cloudinary ids in DB; playback URLs derived at read time. */
 export function wordToClient(w: Word) {
@@ -18,5 +19,8 @@ export function wordToClient(w: Word) {
     exampleAudioSrc: cloudinaryVideoDeliveryUrl(w.exampleAudioPublicId),
     imagePublicId: w.imagePublicId,
     imageSrc: cloudinaryImageDeliveryUrl(w.imagePublicId),
+    imageFocusX: w.imageFocusX,
+    imageFocusY: w.imageFocusY,
+    imageObjectPosition: objectPositionFromFocus(w.imageFocusX, w.imageFocusY),
   };
 }

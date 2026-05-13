@@ -6,6 +6,8 @@ type Props = {
   src: string | null | undefined;
   alt: string;
   className?: string;
+  /** CSS `object-position` when using `object-cover` (e.g. `"50% 15%"`). */
+  objectPosition?: string | null;
 };
 
 function PlaceholderGraphic({ className }: { className?: string }) {
@@ -62,7 +64,7 @@ function PlaceholderGraphic({ className }: { className?: string }) {
  * Word illustration: missing URL or load error → inline placeholder (theme-aware).
  * Remote URLs use a plain img (Cloudinary and blob previews); Next/Image is not used here.
  */
-export default function WordImage({ src, alt, className }: Props) {
+export default function WordImage({ src, alt, className, objectPosition }: Props) {
   const trimmed = (src ?? "").trim();
   const [failedForUrl, setFailedForUrl] = useState<string | null>(null);
   const loadFailed = Boolean(trimmed && failedForUrl === trimmed);
@@ -77,6 +79,7 @@ export default function WordImage({ src, alt, className }: Props) {
       src={trimmed}
       alt={alt}
       className={className}
+      style={objectPosition ? { objectPosition } : undefined}
       loading={trimmed.startsWith("blob:") ? "eager" : "lazy"}
       decoding="async"
       draggable={false}

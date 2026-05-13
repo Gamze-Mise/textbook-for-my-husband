@@ -3,6 +3,10 @@ export type QuizQuestion = {
   term: string;
   imageSrc: string | null;
   audioSrc: string | null;
+  /** Shown after the learner picks an answer. */
+  example: string | null;
+  /** CSS object-position for the illustration (from library framing). */
+  imageObjectPosition?: string;
   choices: [string, string, string, string];
   answerIndex: number;
 };

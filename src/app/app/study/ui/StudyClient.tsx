@@ -354,6 +354,7 @@ export default function StudyClient() {
                         <WordImage
                           src={current.imageSrc}
                           alt=""
+                          objectPosition={current.imageObjectPosition}
                           className="aspect-16/10 w-full object-cover"
                         />
                       </div>

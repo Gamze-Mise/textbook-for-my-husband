@@ -57,6 +57,7 @@ export default function QuizClient() {
 
   const total = questions.length;
   const current = questions[step] ?? null;
+  const choiceLocked = picked[step] !== null;
 
   const score = useMemo(() => {
     if (!finished || !questions.length) return null;
@@ -69,13 +70,17 @@ export default function QuizClient() {
     return Math.round(((step + 1) / total) * 100);
   }, [finished, step, total]);
 
-  const selectChoice = useCallback((index: number) => {
-    setPicked((prev) => {
-      const next = [...prev];
-      next[step] = index;
-      return next;
-    });
-  }, [step]);
+  const selectChoice = useCallback(
+    (index: number) => {
+      setPicked((prev) => {
+        if (prev[step] !== null) return prev;
+        const next = [...prev];
+        next[step] = index;
+        return next;
+      });
+    },
+    [step],
+  );
 
   const nextOrFinish = useCallback(() => {
     if (step >= total - 1) {
@@ -105,6 +110,7 @@ export default function QuizClient() {
       }
 
       if (e.key >= "1" && e.key <= "4") {
+        if (picked[step] !== null) return;
         e.preventDefault();
         selectChoice(Number(e.key) - 1);
         return;
@@ -210,6 +216,7 @@ export default function QuizClient() {
               <WordImage
                 src={current.imageSrc}
                 alt=""
+                objectPosition={current.imageObjectPosition}
                 className="size-full object-cover"
               />
             </div>
@@ -245,43 +252,112 @@ export default function QuizClient() {
                 >
                   {current.choices.map((text, i) => {
                     const selected = picked[step] === i;
+                    const isCorrect = i === current.answerIndex;
+                    const chosen = picked[step];
+                    const wrongPick = chosen !== null && chosen === i && !isCorrect;
+
+                    let rowClass =
+                      "flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-950";
+
+                    if (choiceLocked) {
+                      if (isCorrect) {
+                        rowClass +=
+                          " border-emerald-500/90 bg-emerald-50 text-emerald-950 dark:border-emerald-400/80 dark:bg-emerald-950/40 dark:text-emerald-50";
+                      } else if (wrongPick) {
+                        rowClass +=
+                          " border-red-500/90 bg-red-50 text-red-950 dark:border-red-400/80 dark:bg-red-950/35 dark:text-red-50";
+                      } else {
+                        rowClass +=
+                          " border-zinc-200/80 bg-zinc-50 text-zinc-500 opacity-70 dark:border-zinc-700/80 dark:bg-zinc-900/50 dark:text-zinc-400";
+                      }
+                    } else if (selected) {
+                      rowClass +=
+                        " border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950";
+                    } else {
+                      rowClass +=
+                        " border-zinc-200 bg-white hover:border-zinc-300 active:scale-[0.99] dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-zinc-600";
+                    }
+
+                    let badgeClass =
+                      "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg text-xs font-semibold tabular-nums";
+                    if (choiceLocked) {
+                      if (isCorrect) {
+                        badgeClass +=
+                          " bg-emerald-200/90 text-emerald-900 ring-1 ring-emerald-600/25 dark:bg-emerald-900/60 dark:text-emerald-100 dark:ring-emerald-400/20";
+                      } else if (wrongPick) {
+                        badgeClass +=
+                          " bg-red-200/90 text-red-900 ring-1 ring-red-600/25 dark:bg-red-900/60 dark:text-red-100 dark:ring-red-400/20";
+                      } else {
+                        badgeClass +=
+                          " bg-zinc-200 text-zinc-500 ring-1 ring-zinc-300/80 dark:bg-zinc-800 dark:text-zinc-500 dark:ring-zinc-600/50";
+                      }
+                    } else if (selected) {
+                      badgeClass +=
+                        " bg-white/15 text-white ring-1 ring-white/25 dark:bg-zinc-900/10 dark:text-zinc-950 dark:ring-zinc-900/15";
+                    } else {
+                      badgeClass +=
+                        " bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200/90 dark:bg-zinc-800 dark:text-zinc-200 dark:ring-zinc-600/80";
+                    }
+
+                    let textClass = "min-w-0 flex-1 leading-relaxed ";
+                    if (choiceLocked) {
+                      if (isCorrect) {
+                        textClass += "font-medium text-emerald-950 dark:text-emerald-50";
+                      } else if (wrongPick) {
+                        textClass += "font-medium text-red-950 dark:text-red-50";
+                      } else {
+                        textClass += "text-zinc-600 dark:text-zinc-400";
+                      }
+                    } else {
+                      textClass += selected
+                        ? "text-white/95 dark:text-zinc-950"
+                        : "text-zinc-800 dark:text-zinc-100";
+                    }
+
                     return (
                       <button
                         key={`${current.wordId}-${i}`}
                         type="button"
                         role="radio"
                         aria-checked={selected}
+                        disabled={choiceLocked}
                         onClick={() => selectChoice(i)}
-                        className={[
-                          "flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-950",
-                          selected
-                            ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950"
-                            : "border-zinc-200 bg-white hover:border-zinc-300 active:scale-[0.99] dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-zinc-600",
-                        ].join(" ")}
+                        className={rowClass}
                       >
-                        <span
-                          className={[
-                            "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg text-xs font-semibold tabular-nums",
-                            selected
-                              ? "bg-white/15 text-white ring-1 ring-white/25 dark:bg-zinc-900/10 dark:text-zinc-950 dark:ring-zinc-900/15"
-                              : "bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200/90 dark:bg-zinc-800 dark:text-zinc-200 dark:ring-zinc-600/80",
-                          ].join(" ")}
-                          aria-hidden
-                        >
+                        <span className={badgeClass} aria-hidden>
                           {i + 1}
                         </span>
-                        <span
-                          className={[
-                            "min-w-0 flex-1 leading-relaxed",
-                            selected ? "text-white/95 dark:text-zinc-950" : "text-zinc-800 dark:text-zinc-100",
-                          ].join(" ")}
-                        >
-                          {text}
-                        </span>
+                        <span className={textClass}>{text}</span>
                       </button>
                     );
                   })}
                 </div>
+                {choiceLocked ? (
+                  <div
+                    className="mt-5 space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-900/50"
+                    aria-live="polite"
+                  >
+                    <p
+                      className={
+                        picked[step] === current.answerIndex
+                          ? "text-sm font-semibold text-emerald-800 dark:text-emerald-200"
+                          : "text-sm font-semibold text-red-800 dark:text-red-200"
+                      }
+                    >
+                      {picked[step] === current.answerIndex ? "Correct." : "Wrong."}
+                    </p>
+                    {current.example?.trim() ? (
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                          Example
+                        </p>
+                        <p className="mt-1 text-sm italic leading-relaxed text-zinc-800 dark:text-zinc-200">
+                          {current.example.trim()}
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </div>
           </article>
@@ -326,6 +402,7 @@ export default function QuizClient() {
                 const ok = chosen === q.answerIndex;
                 const skipped = chosen === null;
                 const correctText = q.choices[q.answerIndex];
+                const ex = q.example?.trim();
                 return (
                   <li key={q.wordId} className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0">
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -348,6 +425,11 @@ export default function QuizClient() {
                         <span className="font-medium text-zinc-900 dark:text-zinc-100">
                           {correctText}
                         </span>
+                      </p>
+                    ) : null}
+                    {ex ? (
+                      <p className="text-sm italic leading-relaxed text-zinc-600 dark:text-zinc-400">
+                        Example: {ex}
                       </p>
                     ) : null}
                   </li>

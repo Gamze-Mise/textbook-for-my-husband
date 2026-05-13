@@ -7,6 +7,7 @@ declare global {
   var __prisma: PrismaClient | undefined;
 }
 
+/** Dev singleton survives HMR — after schema changes restart dev (see `predev` in package.json). */
 export const prisma =
   global.__prisma ??
   new PrismaClient({

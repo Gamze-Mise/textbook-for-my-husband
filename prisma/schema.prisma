@@ -59,6 +59,10 @@ model Word {
   exampleAudioPublicId String?
   /** Cloudinary public_id for word image (no URL stored). */
   imagePublicId String?
+  /** 0–100 horizontal focal point for object-fit cover (null = center). */
+  imageFocusX   Int?
+  /** 0–100 vertical focal point (null = center; lower = show more top). */
+  imageFocusY   Int?
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
