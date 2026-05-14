@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { WordBucket } from "@prisma/client";
+import type { Word, WordBucket } from "@prisma/client";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -8,20 +8,30 @@ import type { QuizQuestion } from "@/types/quiz";
 
 const TARGET_QUESTIONS = 20;
 
-/** Higher = more likely in the quiz. Forgotten / needs review dominates; known is rare. */
+/**
+ * Higher = more likely to be picked when we sample 20 from a large eligible pool
+ * (Efraimidis–Spirakis keys). FORGOTTEN / learning still dominate; known is possible but rare.
+ */
 function bucketWeight(bucket: WordBucket): number {
-  if (bucket === "FORGOTTEN") return 30;
-  return 1;
+  if (bucket === "FORGOTTEN") return 80;
+  if (bucket === "TO_STUDY") return 25;
+  return 3;
 }
 
-function weightedShuffle<T extends { bucket: WordBucket }>(items: T[]): T[] {
+/** Weighted random sample without replacement (one pass). */
+function weightedPickWithoutReplacement<T extends { bucket: WordBucket }>(
+  items: T[],
+  k: number,
+): T[] {
+  if (k <= 0) return [];
+  if (k >= items.length) return shuffle(items);
   return [...items]
     .map((item) => ({
       item,
-      score:
-        -Math.log(Math.random() + Number.EPSILON) / bucketWeight(item.bucket),
+      key: Math.random() ** (1 / bucketWeight(item.bucket)),
     }))
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => b.key - a.key)
+    .slice(0, k)
     .map(({ item }) => item);
 }
 
@@ -32,6 +42,53 @@ function shuffle<T>(arr: T[]): T[] {
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
+}
+
+function canFormQuizQuestion(w: Word, allWords: Word[]): boolean {
+  const correct = w.meaning.trim();
+  if (!correct) return false;
+  const otherMeanings = allWords
+    .filter((x) => x.id !== w.id)
+    .map((x) => x.meaning.trim())
+    .filter((m) => m.length > 0 && m !== correct);
+  const uniqueWrong = [...new Set(otherMeanings)];
+  return uniqueWrong.length >= 3;
+}
+
+function buildQuestionForWord(w: Word, allWords: Word[]): QuizQuestion | null {
+  const correct = w.meaning.trim();
+  if (!correct) return null;
+
+  const otherMeanings = allWords
+    .filter((x) => x.id !== w.id)
+    .map((x) => x.meaning.trim())
+    .filter((m) => m.length > 0 && m !== correct);
+
+  const uniqueWrong = [...new Set(otherMeanings)];
+  const wrongThree = shuffle(uniqueWrong).slice(0, 3);
+  if (wrongThree.length < 3) return null;
+
+  const choices = shuffle([
+    correct,
+    wrongThree[0],
+    wrongThree[1],
+    wrongThree[2],
+  ]) as [string, string, string, string];
+  const answerIndex = choices.indexOf(correct);
+  if (answerIndex < 0) return null;
+
+  const c = wordToClient(w);
+  return {
+    wordId: c.id,
+    term: c.term,
+    imageSrc: c.imageSrc,
+    audioSrc: c.audioSrc,
+    example: c.example,
+    imageObjectPosition: c.imageObjectPosition,
+    bucket: c.bucket,
+    choices,
+    answerIndex,
+  };
 }
 
 export async function GET() {
@@ -46,7 +103,6 @@ export async function GET() {
 
   const words = await prisma.word.findMany({
     where: { userId: uid },
-    orderBy: { createdAt: "desc" },
   });
 
   if (words.length < 4) {
@@ -56,45 +112,16 @@ export async function GET() {
     );
   }
 
-  const order = weightedShuffle(words);
+  const eligible = words.filter((w) => canFormQuizQuestion(w, words));
+  const picked =
+    eligible.length <= TARGET_QUESTIONS
+      ? shuffle(eligible)
+      : weightedPickWithoutReplacement(eligible, TARGET_QUESTIONS);
+
   const questions: QuizQuestion[] = [];
-
-  for (const w of order) {
-    if (questions.length >= TARGET_QUESTIONS) break;
-
-    const correct = w.meaning.trim();
-    if (!correct) continue;
-
-    const otherMeanings = words
-      .filter((x) => x.id !== w.id)
-      .map((x) => x.meaning.trim())
-      .filter((m) => m.length > 0 && m !== correct);
-
-    const uniqueWrong = [...new Set(otherMeanings)];
-    const wrongThree = shuffle(uniqueWrong).slice(0, 3);
-    if (wrongThree.length < 3) continue;
-
-    const choices = shuffle([
-      correct,
-      wrongThree[0],
-      wrongThree[1],
-      wrongThree[2],
-    ]) as [string, string, string, string];
-    const answerIndex = choices.indexOf(correct);
-    if (answerIndex < 0) continue;
-
-    const c = wordToClient(w);
-    questions.push({
-      wordId: c.id,
-      term: c.term,
-      imageSrc: c.imageSrc,
-      audioSrc: c.audioSrc,
-      example: c.example,
-      imageObjectPosition: c.imageObjectPosition,
-      bucket: c.bucket,
-      choices,
-      answerIndex,
-    });
+  for (const w of picked) {
+    const q = buildQuestionForWord(w, words);
+    if (q) questions.push(q);
   }
 
   if (questions.length === 0) {
@@ -107,5 +134,5 @@ export async function GET() {
     );
   }
 
-  return NextResponse.json({ ok: true as const, questions });
+  return NextResponse.json({ ok: true as const, questions: shuffle(questions) });
 }

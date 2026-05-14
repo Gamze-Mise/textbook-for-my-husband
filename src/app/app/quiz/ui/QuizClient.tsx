@@ -35,7 +35,7 @@ export default function QuizClient() {
     setPicked([]);
     forgottenMarkedRef.current.clear();
 
-    const res = await fetch("/api/quiz");
+    const res = await fetch("/api/quiz", { cache: "no-store" });
     const json = (await res.json().catch(() => null)) as QuizJson;
 
     setLoading(false);
