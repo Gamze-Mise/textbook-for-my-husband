@@ -288,6 +288,7 @@ export default function DashboardClient() {
         audioPublicId,
         ...(imagePublicId
           ? {
+              imagePublicId,
               imageFocusX: clampImageFocus(addImageFocusX),
               imageFocusY: clampImageFocus(addImageFocusY),
             }
