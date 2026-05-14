@@ -8,7 +8,7 @@ export default async function QuizPage() {
   if (!session?.user?.id) redirect("/login");
 
   return (
-    <div className="min-h-dvh bg-zinc-50 dark:bg-black">
+    <div className="flex min-h-0 h-dvh flex-col overflow-hidden bg-zinc-50 dark:bg-black">
       <QuizClient />
     </div>
   );

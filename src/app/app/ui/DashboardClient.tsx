@@ -1,16 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { signOut, useSession } from "next-auth/react";
-import ThemeToggle from "@/components/ThemeToggle";
 import IllustrationField from "@/components/IllustrationField";
 import { validateWordImageFile } from "@/lib/wordImageConstraints";
 import { clampImageFocus } from "@/lib/wordImageFocus";
 import WordImage from "@/components/WordImage";
 import LogoMark from "@/components/LogoMark";
 import AlertBanner from "@/components/app/AlertBanner";
+import AppAccountMenu from "@/components/app/AppAccountMenu";
 import AppNavLink from "@/components/app/AppNavLink";
-import { type DeckTab, type WordCard, deckTabLabel } from "@/types/word";
+import {
+  type DeckTab,
+  type WordBucket,
+  type WordCard,
+  deckTabLabel,
+  wordBucketLabel,
+} from "@/types/word";
 
 function textSizeForLength(args: {
   len: number;
@@ -24,7 +29,6 @@ function textSizeForLength(args: {
 }
 
 export default function DashboardClient() {
-  const { data: session } = useSession();
   const [active, setActive] = useState<DeckTab>("MIXED");
   const [words, setWords] = useState<WordCard[]>([]);
   const [query, setQuery] = useState("");
@@ -44,8 +48,6 @@ export default function DashboardClient() {
   const addPreviewRef = useRef<string | null>(null);
   const [addImageFocusX, setAddImageFocusX] = useState(50);
   const [addImageFocusY, setAddImageFocusY] = useState(50);
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement | null>(null);
 
   const [editing, setEditing] = useState<WordCard | null>(null);
   const [editTerm, setEditTerm] = useState("");
@@ -528,25 +530,10 @@ export default function DashboardClient() {
     await load({ silent: true });
   }
 
-  useEffect(() => {
-    function onClick(e: MouseEvent) {
-      if (!userMenuOpen) return;
-      if (!menuRef.current) return;
-      if (e.target instanceof Node && !menuRef.current.contains(e.target)) {
-        setUserMenuOpen(false);
-      }
-    }
-    window.addEventListener("mousedown", onClick);
-    return () => window.removeEventListener("mousedown", onClick);
-  }, [userMenuOpen]);
-
-  const userEmail = session?.user?.email ?? "Account";
-  const userInitial = (session?.user?.email?.[0] ?? "U").toUpperCase();
-
   return (
     <div className="mx-auto w-full max-w-6xl p-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+      <header className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <LogoMark />
           <div className="flex flex-col">
             <div className="text-sm font-medium">Flashcards</div>
@@ -556,7 +543,7 @@ export default function DashboardClient() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:flex-nowrap">
           <button
             onClick={() => {
               setError(null);
@@ -576,56 +563,28 @@ export default function DashboardClient() {
           <AppNavLink href="/app/study">Study</AppNavLink>
           <AppNavLink href="/app/quiz">Quiz</AppNavLink>
 
-          <div className="relative" ref={menuRef}>
-            <button
-              className="inline-flex size-10 items-center justify-center rounded-full border border-zinc-200 bg-white text-sm font-semibold dark:border-zinc-800 dark:bg-zinc-950"
-              onClick={() => setUserMenuOpen((v) => !v)}
-              aria-label="Account menu"
-              title={userEmail}
-            >
-              {userInitial}
-            </button>
-            {userMenuOpen ? (
-              <div className="absolute right-0 mt-2 w-64 rounded-2xl border border-zinc-200 bg-white p-3 shadow-lg dark:border-zinc-800 dark:bg-zinc-950">
-                <div className="px-2 pb-2">
-                  <div className="text-xs text-zinc-600 dark:text-zinc-400">
-                    Signed in as
-                  </div>
-                  <div className="truncate text-sm font-medium">
-                    {userEmail}
-                  </div>
-                </div>
-                <div className="px-2 py-2">
-                  <ThemeToggle />
-                </div>
-                <button
-                  className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium dark:border-zinc-800 dark:bg-zinc-950"
-                  onClick={() => signOut({ callbackUrl: "/" })}
-                >
-                  Sign out
-                </button>
-              </div>
-            ) : null}
-          </div>
+          <AppAccountMenu />
         </div>
       </header>
 
-      <div className="mt-6 flex flex-wrap items-center gap-2">
-        {tabs.map((t) => (
-          <button
-            key={t}
-            onClick={() => setActive(t)}
-            className={[
-              "rounded-xl px-3 py-2 text-sm font-medium",
-              t === active
-                ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950"
-                : "border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950",
-            ].join(" ")}
-          >
-            {deckTabLabel(t)}
-          </button>
-        ))}
-        <div className="ml-auto w-full sm:w-auto sm:min-w-72">
+      <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center justify-end gap-2 sm:justify-start">
+          {tabs.map((t) => (
+            <button
+              key={t}
+              onClick={() => setActive(t)}
+              className={[
+                "rounded-xl px-3 py-2 text-sm font-medium",
+                t === active
+                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-950"
+                  : "border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950",
+              ].join(" ")}
+            >
+              {t === "MIXED" ? "All" : deckTabLabel(t)}
+            </button>
+          ))}
+        </div>
+        <div className="w-full sm:ml-auto sm:w-auto sm:min-w-72">
           <input
             className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-800 dark:bg-zinc-950"
             placeholder="Search..."
@@ -654,13 +613,13 @@ export default function DashboardClient() {
           </div>
         ) : filtered.length ? (
           filtered.map((w) => (
-            <Flashcard
-              key={w.id}
-              word={w}
-              onChanged={() => void load({ silent: true })}
-              onEdit={openEdit}
-              onDelete={(word) => setDeleting(word)}
-            />
+            <div key={w.id} className="h-full min-h-0">
+              <Flashcard
+                word={w}
+                onEdit={openEdit}
+                onDelete={(word) => setDeleting(word)}
+              />
+            </div>
           ))
         ) : (
           <div className="text-sm text-zinc-600 dark:text-zinc-400">
@@ -954,26 +913,26 @@ export default function DashboardClient() {
   );
 }
 
+function wordBucketBadgeClass(bucket: WordBucket): string {
+  switch (bucket) {
+    case "KNOWN":
+      return "border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-800/80 dark:bg-emerald-950/45 dark:text-emerald-50";
+    case "TO_STUDY":
+      return "border-sky-200 bg-sky-50 text-sky-950 dark:border-sky-800/80 dark:bg-sky-950/40 dark:text-sky-50";
+    case "FORGOTTEN":
+      return "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-800/80 dark:bg-amber-950/40 dark:text-amber-50";
+  }
+}
+
 function Flashcard({
   word,
-  onChanged,
   onEdit,
   onDelete,
 }: {
   word: WordCard;
-  onChanged: () => void;
   onEdit: (w: WordCard) => void;
   onDelete: (w: WordCard) => void;
 }) {
-  function mark(bucket: "KNOWN" | "FORGOTTEN") {
-    void fetch(`/api/words/${word.id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ bucket }),
-    }).catch(() => null);
-    onChanged();
-  }
-
   const termSize = textSizeForLength({
     len: word.term.length,
     thresholds: [14, 22],
@@ -989,31 +948,6 @@ function Flashcard({
     thresholds: [220, 420],
     classes: ["text-sm", "text-xs", "text-[11px]"],
   });
-
-  const actions = (
-    <div className="mt-auto flex gap-2 pt-4">
-      <button
-        type="button"
-        className="flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-medium dark:border-zinc-800 dark:bg-zinc-950"
-        onClick={(e) => {
-          e.stopPropagation();
-          mark("KNOWN");
-        }}
-      >
-        Got it
-      </button>
-      <button
-        type="button"
-        className="flex-1 rounded-xl bg-zinc-900 px-3 py-2 text-xs font-medium text-white dark:bg-zinc-100 dark:text-zinc-950"
-        onClick={(e) => {
-          e.stopPropagation();
-          mark("FORGOTTEN");
-        }}
-      >
-        Again
-      </button>
-    </div>
-  );
 
   const toolbar = (
     <div className="flex shrink-0 items-center gap-1">
@@ -1071,29 +1005,37 @@ function Flashcard({
   );
 
   return (
-    <div className="group rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950">
-      <div className="flex min-h-88 flex-col">
-        <div className="overflow-hidden rounded-xl ring-1 ring-zinc-200/80 dark:ring-zinc-800">
-          <WordImage
-            src={word.imageSrc}
-            alt=""
-            objectPosition={word.imageObjectPosition}
-            className="aspect-[16/10] w-full object-cover"
-          />
-        </div>
+    <div className="group flex h-full min-h-88 flex-col rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="relative shrink-0 overflow-hidden rounded-xl ring-1 ring-zinc-200/80 dark:ring-zinc-800">
+        <span
+          className={[
+            "absolute right-2 top-2 z-10 max-w-[min(12rem,calc(100%-1rem))] truncate rounded-md border px-2 py-0.5 text-[10px] font-semibold leading-tight shadow-md backdrop-blur-[2px] sm:right-2.5 sm:top-2.5 sm:px-2.5 sm:py-1 sm:text-[11px]",
+            wordBucketBadgeClass(word.bucket),
+          ].join(" ")}
+        >
+          {wordBucketLabel(word.bucket)}
+        </span>
+        <WordImage
+          src={word.imageSrc}
+          alt=""
+          objectPosition={word.imageObjectPosition}
+          className="aspect-[16/10] w-full object-cover"
+        />
+      </div>
 
-        <div className="mt-3 flex items-start justify-between gap-3">
-          <div className="w-full min-w-0">
-            <div
-              className={[termSize, "font-semibold tracking-tight"].join(" ")}
-            >
-              {word.term}
-            </div>
+      <div className="mt-3 flex items-start justify-between gap-3">
+        <div className="w-full min-w-0">
+          <div
+            className={[termSize, "font-semibold tracking-tight"].join(" ")}
+          >
+            {word.term}
           </div>
-          {toolbar}
         </div>
+        {toolbar}
+      </div>
 
-        <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto">
+      <div className="mt-3 flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+        <div className="my-auto flex min-h-0 w-full flex-col gap-3">
           <div>
             <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
               Meaning
@@ -1119,15 +1061,15 @@ function Flashcard({
             </div>
           ) : null}
         </div>
+      </div>
 
+      <div className="mt-3 shrink-0">
         {word.audioSrc ? (
           <audio className="w-full" controls src={word.audioSrc} />
         ) : (
           <div className="h-10" aria-hidden />
         )}
-
-        {actions}
       </div>
     </div>
   );
-}
+  }

@@ -25,15 +25,19 @@ export type WordCard = {
 
 export const STUDY_DECK_TABS: DeckTab[] = ["MIXED", "FORGOTTEN", "KNOWN"];
 
-export function deckTabLabel(tab: DeckTab): string {
-  switch (tab) {
+/** Human-readable status for a stored word bucket (library cards, filters). */
+export function wordBucketLabel(bucket: WordBucket): string {
+  switch (bucket) {
     case "KNOWN":
       return "Known";
     case "TO_STUDY":
       return "Learning";
     case "FORGOTTEN":
       return "Needs review";
-    case "MIXED":
-      return "Mixed";
   }
+}
+
+export function deckTabLabel(tab: DeckTab): string {
+  if (tab === "MIXED") return "Mixed";
+  return wordBucketLabel(tab);
 }

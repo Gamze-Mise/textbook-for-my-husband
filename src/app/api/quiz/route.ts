@@ -8,25 +8,18 @@ import type { QuizQuestion } from "@/types/quiz";
 
 const TARGET_QUESTIONS = 20;
 
-/** Higher = more likely to appear early in the quiz (Again/Forgotten prioritized). */
+/** Higher = more likely in the quiz. Forgotten / needs review dominates; known is rare. */
 function bucketWeight(bucket: WordBucket): number {
-  switch (bucket) {
-    case "FORGOTTEN":
-      return 8;
-    case "TO_STUDY":
-      return 2.5;
-    case "KNOWN":
-      return 1;
-    default:
-      return 1;
-  }
+  if (bucket === "FORGOTTEN") return 30;
+  return 1;
 }
 
 function weightedShuffle<T extends { bucket: WordBucket }>(items: T[]): T[] {
   return [...items]
     .map((item) => ({
       item,
-      score: -Math.log(Math.random() + Number.EPSILON) / bucketWeight(item.bucket),
+      score:
+        -Math.log(Math.random() + Number.EPSILON) / bucketWeight(item.bucket),
     }))
     .sort((a, b) => b.score - a.score)
     .map(({ item }) => item);
@@ -81,12 +74,12 @@ export async function GET() {
     const wrongThree = shuffle(uniqueWrong).slice(0, 3);
     if (wrongThree.length < 3) continue;
 
-    const choices = shuffle([correct, wrongThree[0], wrongThree[1], wrongThree[2]]) as [
-      string,
-      string,
-      string,
-      string,
-    ];
+    const choices = shuffle([
+      correct,
+      wrongThree[0],
+      wrongThree[1],
+      wrongThree[2],
+    ]) as [string, string, string, string];
     const answerIndex = choices.indexOf(correct);
     if (answerIndex < 0) continue;
 
@@ -98,6 +91,7 @@ export async function GET() {
       audioSrc: c.audioSrc,
       example: c.example,
       imageObjectPosition: c.imageObjectPosition,
+      bucket: c.bucket,
       choices,
       answerIndex,
     });

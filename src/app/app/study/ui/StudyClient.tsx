@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AppNavLink from "@/components/app/AppNavLink";
 import AppPageHeader from "@/components/app/AppPageHeader";
+import AppAccountMenu from "@/components/app/AppAccountMenu";
 import AlertBanner from "@/components/app/AlertBanner";
-import ThemeToggle from "@/components/ThemeToggle";
 import WordImage from "@/components/WordImage";
 import { tabPillActive, tabPillIdle } from "@/components/ui/buttonClasses";
 import { type DeckTab, type WordCard, STUDY_DECK_TABS, deckTabLabel } from "@/types/word";
@@ -270,9 +270,9 @@ export default function StudyClient() {
         showBottomBorder={false}
         actions={
           <>
-            <ThemeToggle />
             <AppNavLink href="/app">Library</AppNavLink>
             <AppNavLink href="/app/quiz">Quiz</AppNavLink>
+            <AppAccountMenu />
           </>
         }
       />

@@ -1,3 +1,5 @@
+import type { WordBucket } from "@/types/word";
+
 export type QuizQuestion = {
   wordId: string;
   term: string;
@@ -7,6 +9,8 @@ export type QuizQuestion = {
   example: string | null;
   /** CSS object-position for the illustration (from library framing). */
   imageObjectPosition?: string;
+  /** Deck bucket when the quiz was built (used to skip redundant PATCH). */
+  bucket: WordBucket;
   choices: [string, string, string, string];
   answerIndex: number;
 };

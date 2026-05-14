@@ -22,3 +22,6 @@ src/generated/
 .vscode/
 .idea/
 
+# TypeScript incremental
+*.tsbuildinfo
+
