@@ -17,8 +17,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Flashcards",
-    template: "%s · Flashcards",
+    default: "Vocabulary",
+    template: "%s · Vocabulary",
   },
   description: "Private vocabulary deck with audio, study, and quiz.",
   icons: {

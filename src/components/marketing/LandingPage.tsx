@@ -33,7 +33,7 @@ export default function LandingPage() {
         <header className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <LogoMark />
-            <span className="text-sm font-semibold tracking-tight">Flashcards</span>
+            <span className="text-sm font-semibold tracking-tight">Vocabulary</span>
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />

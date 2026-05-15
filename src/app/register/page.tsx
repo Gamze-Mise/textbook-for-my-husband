@@ -57,7 +57,7 @@ export default function RegisterPage() {
           <LogoMark />
           <div className="flex flex-col">
             <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
-              Flashcards
+              Vocabulary
             </span>
             <h1 className="text-2xl font-semibold tracking-tight">
               Create your account

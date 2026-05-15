@@ -57,7 +57,7 @@ function MockAudioBar() {
   );
 }
 
-function MockFlashcard({
+function MockLibraryCard({
   term,
   meaning,
   example,
@@ -109,7 +109,7 @@ function LibraryPreview() {
         <div className="flex items-center gap-2">
           <LogoMark />
           <div>
-            <p className="text-sm font-medium">Flashcards</p>
+            <p className="text-sm font-medium">Library</p>
             <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
               Mixed by default, tabs when you need them
             </p>
@@ -145,7 +145,7 @@ function LibraryPreview() {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {MOCK_CARDS.map((c) => (
-          <MockFlashcard key={c.term} {...c} />
+          <MockLibraryCard key={c.term} {...c} />
         ))}
       </div>
     </div>
@@ -158,7 +158,7 @@ function StudyPreview() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Study mode</p>
-          <h3 className="text-lg font-semibold tracking-tight">Flashcards</h3>
+          <h3 className="text-lg font-semibold tracking-tight">Study</h3>
         </div>
         <div className="flex gap-1.5">
           <span className={btnSecondaryCompact}>Library</span>
@@ -291,7 +291,7 @@ export default function LandingAppPreview() {
           <span className="size-2.5 rounded-full bg-zinc-300 dark:bg-zinc-600" />
           <span className="size-2.5 rounded-full bg-zinc-300 dark:bg-zinc-600" />
           <span className="ml-2 flex-1 truncate rounded-md bg-zinc-100 px-3 py-1 text-center text-[11px] text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
-            flashcards.app
+            vocabulary.app
           </span>
         </div>
         <div className="max-h-[min(70vh,36rem)] overflow-y-auto overscroll-contain bg-zinc-50 p-3 dark:bg-zinc-950 sm:p-4">

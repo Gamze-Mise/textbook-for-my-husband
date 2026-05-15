@@ -23,7 +23,7 @@ async function sendResetEmail(args: { to: string; resetUrl: string }) {
   await transporter.sendMail({
     from: env.SMTP_USER,
     to: args.to,
-    subject: "Flashcards: reset your password",
+    subject: "Vocabulary: reset your password",
     text: `Reset your password: ${args.resetUrl}`,
     html: `
       <p>Reset your password:</p>

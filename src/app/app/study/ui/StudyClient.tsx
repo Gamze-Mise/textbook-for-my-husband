@@ -266,7 +266,7 @@ export default function StudyClient() {
     >
       <AppPageHeader
         kicker="Study mode"
-        title="Flashcards"
+        title="Study"
         showBottomBorder={false}
         actions={
           <>

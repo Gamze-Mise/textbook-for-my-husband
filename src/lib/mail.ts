@@ -30,7 +30,7 @@ export async function sendVerificationEmail(args: {
   await transporter.sendMail({
     from: env.SMTP_USER,
     to: args.to,
-    subject: "Flashcards: verify your email",
+    subject: "Vocabulary: verify your email",
     text: `Finish creating your account: ${args.verifyUrl}`,
     html: `
       <p>Finish creating your account:</p>

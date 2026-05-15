@@ -1,4 +1,4 @@
-# Flashcards
+# Vocabulary
 
 Personal vocabulary trainer with audio, illustrations, study mode, and adaptive quizzes. Each user gets a private deck—words move between **Known**, **Learning**, and **Needs review** as you practice.
 
@@ -95,7 +95,7 @@ Audio and image uploads require valid Cloudinary credentials. Email flows requir
 src/
   app/                 # Routes (landing, auth, /app library · study · quiz)
   app/api/             # REST API (words, quiz, TTS, auth)
-  components/          # UI (flashcards, marketing, shared)
+  components/          # UI (word cards, marketing, shared)
   lib/                 # Auth, Prisma, Cloudinary, mail
 prisma/
   schema.prisma        # User & Word models

@@ -42,7 +42,7 @@ export default function ForgotPasswordPage() {
           <div className="size-10 rounded-xl bg-zinc-900 dark:bg-zinc-100" />
           <div className="flex flex-col">
             <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
-              Flashcards
+              Vocabulary
             </span>
             <h1 className="text-2xl font-semibold tracking-tight">
               Reset your password

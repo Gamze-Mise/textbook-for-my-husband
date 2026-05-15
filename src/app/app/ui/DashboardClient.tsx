@@ -537,7 +537,7 @@ export default function DashboardClient() {
         <div className="flex min-w-0 items-center gap-3">
           <LogoMark />
           <div className="flex flex-col">
-            <div className="text-sm font-medium">Flashcards</div>
+            <div className="text-sm font-medium">Library</div>
             <div className="text-xs text-zinc-600 dark:text-zinc-400">
               Mixed by default, tabs when you need them
             </div>
@@ -615,7 +615,7 @@ export default function DashboardClient() {
         ) : filtered.length ? (
           filtered.map((w) => (
             <div key={w.id} className="h-full min-h-0">
-              <Flashcard
+              <LibraryCard
                 word={w}
                 onEdit={openEdit}
                 onDelete={(word) => setDeleting(word)}
@@ -678,7 +678,7 @@ export default function DashboardClient() {
                 <IllustrationField
                   fieldId="add-card-illustration"
                   title="Card illustration"
-                  description="Appears on the front of the flashcard in study mode. You can skip this—a default graphic is used instead."
+                  description="Appears on the front of the card in Study. You can skip this—a default graphic is used instead."
                   previewSrc={addImagePreviewUrl}
                   disabled={saving}
                   uploading={Boolean(saving && addImageFile)}
@@ -914,7 +914,7 @@ export default function DashboardClient() {
   );
 }
 
-function Flashcard({
+function LibraryCard({
   word,
   onEdit,
   onDelete,
