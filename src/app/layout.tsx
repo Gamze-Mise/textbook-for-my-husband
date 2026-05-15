@@ -16,8 +16,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Flashcards",
-  description: "Audio-backed English flashcards.",
+  title: {
+    default: "Flashcards",
+    template: "%s · Flashcards",
+  },
+  description: "Private vocabulary deck with audio, study, and quiz.",
   icons: {
     icon: [{ url: "/favicon.png", type: "image/png" }],
   },

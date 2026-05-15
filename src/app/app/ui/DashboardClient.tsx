@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import IllustrationField from "@/components/IllustrationField";
 import { validateWordImageFile } from "@/lib/wordImageConstraints";
 import { clampImageFocus } from "@/lib/wordImageFocus";
+import { wordBucketBadgeClass } from "@/lib/wordBucketStyles";
 import WordImage from "@/components/WordImage";
 import LogoMark from "@/components/LogoMark";
 import AlertBanner from "@/components/app/AlertBanner";
@@ -11,7 +12,6 @@ import AppAccountMenu from "@/components/app/AppAccountMenu";
 import AppNavLink from "@/components/app/AppNavLink";
 import {
   type DeckTab,
-  type WordBucket,
   type WordCard,
   deckTabLabel,
   wordBucketLabel,
@@ -912,17 +912,6 @@ export default function DashboardClient() {
       ) : null}
     </div>
   );
-}
-
-function wordBucketBadgeClass(bucket: WordBucket): string {
-  switch (bucket) {
-    case "KNOWN":
-      return "border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-800/80 dark:bg-emerald-950/45 dark:text-emerald-50";
-    case "TO_STUDY":
-      return "border-sky-200 bg-sky-50 text-sky-950 dark:border-sky-800/80 dark:bg-sky-950/40 dark:text-sky-50";
-    case "FORGOTTEN":
-      return "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-800/80 dark:bg-amber-950/40 dark:text-amber-50";
-  }
 }
 
 function Flashcard({
