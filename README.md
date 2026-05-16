@@ -65,7 +65,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 Audio and image uploads require valid Cloudinary credentials. Email flows require working SMTP.
 
-**Pronunciation:** By default, audio uses Google Translate TTS (`tl=en` on `translate.google.com` for US English). For higher quality (recommended if a word sounds wrong), set optional `GOOGLE_CLOUD_TTS_API_KEY` (enable [Cloud Text-to-Speech](https://cloud.google.com/text-to-speech) on your GCP project).
+**Pronunciation:** Default is Google Translate TTS (`tl=en`, same style as translate.google.com). Optional `GOOGLE_CLOUD_TTS_API_KEY` is used only when Translate fails, unless you set `GOOGLE_CLOUD_TTS_MODE=cloud-first` (e.g. on Vercel if Translate returns poor audio from the datacenter). TTS responses include `engine`: `"translate"` or `"cloud"`.
 
 ## Scripts
 

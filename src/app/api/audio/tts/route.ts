@@ -4,7 +4,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { cloudinary } from "@/lib/cloudinary";
 import { cloudinaryVideoDeliveryUrl } from "@/lib/cloudinaryDelivery";
-import { synthesizeUsEnglishSpeech } from "@/lib/googleTts";
+import { synthesizeUsEnglishSpeech, type TtsEngine } from "@/lib/googleTts";
 
 const bodySchema = z.object({
   term: z.string().min(1).max(64).optional(),
@@ -30,8 +30,9 @@ export async function POST(req: Request) {
     : "textbook/audio/word";
 
   let buffer: Buffer;
+  let engine: TtsEngine = "translate";
   try {
-    buffer = await synthesizeUsEnglishSpeech(raw);
+    ({ buffer, engine } = await synthesizeUsEnglishSpeech(raw));
   } catch {
     return NextResponse.json({ error: "TTS request failed." }, { status: 502 });
   }
@@ -62,6 +63,7 @@ export async function POST(req: Request) {
       ok: true,
       audioPublicId: uploaded.public_id,
       audioSrc: cloudinaryVideoDeliveryUrl(uploaded.public_id),
+      engine,
     });
   } catch (e) {
     const msg =
