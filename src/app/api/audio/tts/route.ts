@@ -4,7 +4,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { cloudinary } from "@/lib/cloudinary";
 import { cloudinaryVideoDeliveryUrl } from "@/lib/cloudinaryDelivery";
-import googleTTS from "google-tts-api";
+import { synthesizeUsEnglishSpeech } from "@/lib/googleTts";
 
 const bodySchema = z.object({
   term: z.string().min(1).max(64).optional(),
@@ -29,21 +29,9 @@ export async function POST(req: Request) {
     ? "textbook/audio/example"
     : "textbook/audio/word";
 
-  // NOTE: This uses Google Translate TTS endpoint via google-tts-api.
-  const url = googleTTS.getAudioUrl(raw, {
-    lang: "en",
-    slow: false,
-    host: "https://translate.google.com",
-  });
-
   let buffer: Buffer;
   try {
-    const res = await fetch(url);
-    if (!res.ok) {
-      return NextResponse.json({ error: "TTS request failed." }, { status: 502 });
-    }
-    const arr = await res.arrayBuffer();
-    buffer = Buffer.from(arr);
+    buffer = await synthesizeUsEnglishSpeech(raw);
   } catch {
     return NextResponse.json({ error: "TTS request failed." }, { status: 502 });
   }
@@ -93,4 +81,3 @@ export async function POST(req: Request) {
     );
   }
 }
-

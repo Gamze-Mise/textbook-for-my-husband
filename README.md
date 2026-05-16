@@ -12,14 +12,14 @@ Personal vocabulary trainer with audio, illustrations, study mode, and adaptive 
 
 ## Tech stack
 
-| Layer | Tools |
-|-------|--------|
-| App | Next.js 16 (App Router), React 19, TypeScript |
-| Data | PostgreSQL, Prisma 7 |
-| Auth | NextAuth (credentials) |
-| Media | Cloudinary (images + audio) |
-| Email | Nodemailer (SMTP) |
-| UI | Tailwind CSS 4 |
+| Layer | Tools                                         |
+| ----- | --------------------------------------------- |
+| App   | Next.js 16 (App Router), React 19, TypeScript |
+| Data  | PostgreSQL, Prisma 7                          |
+| Auth  | NextAuth (credentials)                        |
+| Media | Cloudinary (images + audio)                   |
+| Email | Nodemailer (SMTP)                             |
+| UI    | Tailwind CSS 4                                |
 
 ## Prerequisites
 
@@ -49,33 +49,35 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Environment variables
 
-| Variable | Description |
-|----------|-------------|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `NEXTAUTH_URL` | App URL (`http://localhost:3000` in dev) |
-| `NEXTAUTH_SECRET` | Random string for session signing |
-| `SMTP_HOST` | SMTP server host |
-| `SMTP_PORT` | Usually `587` |
-| `SMTP_SECURE` | `true` or `false` |
-| `SMTP_USER` | SMTP username |
-| `SMTP_PASS` | SMTP password |
-| `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name |
-| `CLOUDINARY_API_KEY` | Cloudinary API key |
-| `CLOUDINARY_API_SECRET` | Cloudinary API secret |
+| Variable                | Description                              |
+| ----------------------- | ---------------------------------------- |
+| `DATABASE_URL`          | PostgreSQL connection string             |
+| `NEXTAUTH_URL`          | App URL (`http://localhost:3000` in dev) |
+| `NEXTAUTH_SECRET`       | Random string for session signing        |
+| `SMTP_HOST`             | SMTP server host                         |
+| `SMTP_PORT`             | Usually `587`                            |
+| `SMTP_SECURE`           | `true` or `false`                        |
+| `SMTP_USER`             | SMTP username                            |
+| `SMTP_PASS`             | SMTP password                            |
+| `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name                    |
+| `CLOUDINARY_API_KEY`    | Cloudinary API key                       |
+| `CLOUDINARY_API_SECRET` | Cloudinary API secret                    |
 
 Audio and image uploads require valid Cloudinary credentials. Email flows require working SMTP.
 
+**Pronunciation:** By default, audio uses Google Translate TTS (`tl=en` on `translate.google.com` for US English). For higher quality (recommended if a word sounds wrong), set optional `GOOGLE_CLOUD_TTS_API_KEY` (enable [Cloud Text-to-Speech](https://cloud.google.com/text-to-speech) on your GCP project).
+
 ## Scripts
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start dev server |
-| `npm run build` | Production build |
-| `npm run start` | Run production build locally |
-| `npm run lint` | ESLint |
-| `npm test` | Lint + production build |
-| `npm run prisma:migrate` | Apply migrations (dev) |
-| `npm run vercel-build` | Migrate, generate client, build (CI / Vercel) |
+| Command                  | Description                                   |
+| ------------------------ | --------------------------------------------- |
+| `npm run dev`            | Start dev server                              |
+| `npm run build`          | Production build                              |
+| `npm run start`          | Run production build locally                  |
+| `npm run lint`           | ESLint                                        |
+| `npm test`               | Lint + production build                       |
+| `npm run prisma:migrate` | Apply migrations (dev)                        |
+| `npm run vercel-build`   | Migrate, generate client, build (CI / Vercel) |
 
 ## Deployment (Vercel)
 
