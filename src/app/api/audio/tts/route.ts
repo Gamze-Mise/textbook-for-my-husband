@@ -31,8 +31,9 @@ export async function POST(req: Request) {
 
   let buffer: Buffer;
   let engine: TtsEngine = "translate";
+  let usedCloudFallback = false;
   try {
-    ({ buffer, engine } = await synthesizeUsEnglishSpeech(raw));
+    ({ buffer, engine, usedCloudFallback } = await synthesizeUsEnglishSpeech(raw));
   } catch {
     return NextResponse.json({ error: "TTS request failed." }, { status: 502 });
   }
@@ -64,6 +65,7 @@ export async function POST(req: Request) {
       audioPublicId: uploaded.public_id,
       audioSrc: cloudinaryVideoDeliveryUrl(uploaded.public_id),
       engine,
+      usedCloudFallback,
     });
   } catch (e) {
     const msg =

@@ -65,8 +65,110 @@ export default function DashboardClient() {
   const [editImageFocusX, setEditImageFocusX] = useState(50);
   const [editImageFocusY, setEditImageFocusY] = useState(50);
   const [editImageClear, setEditImageClear] = useState(false);
+  const [regeneratingTermAudio, setRegeneratingTermAudio] = useState(false);
   const [deleting, setDeleting] = useState<WordCard | null>(null);
   const [deletingNow, setDeletingNow] = useState(false);
+
+  type TermTtsOk = {
+    ok: true;
+    audioPublicId: string;
+    audioSrc: string;
+    engine?: "translate" | "cloud";
+    usedCloudFallback?: boolean;
+  };
+  type TermTtsResult = TermTtsOk | { ok: false; error: string };
+
+  async function requestTermTts(term: string): Promise<TermTtsResult> {
+    const tts = await fetch("/api/audio/tts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ term }),
+    });
+    const ttsJson = (await tts.json().catch(() => null)) as
+      | {
+          ok: true;
+          audioPublicId: string;
+          audioSrc: string;
+          engine?: "translate" | "cloud";
+          usedCloudFallback?: boolean;
+        }
+      | { error: string }
+      | null;
+
+    if (!tts.ok || !ttsJson || "error" in ttsJson) {
+      return {
+        ok: false,
+        error:
+          ttsJson && "error" in ttsJson
+            ? ttsJson.error
+            : "Pronunciation could not be generated.",
+      };
+    }
+
+    return {
+      ok: true,
+      audioPublicId: ttsJson.audioPublicId,
+      audioSrc: ttsJson.audioSrc,
+      engine: ttsJson.engine,
+      usedCloudFallback: ttsJson.usedCloudFallback,
+    };
+  }
+
+  function ttsRegenNotice(tts: TermTtsOk): string {
+    if (tts.engine === "cloud") {
+      return "Pronunciation used Google Cloud TTS (often “multay” for “multi”). On Vercel: remove GOOGLE_CLOUD_TTS_API_KEY, keep GOOGLE_CLOUD_TTS_MODE off cloud-first, redeploy, then regenerate again.";
+    }
+    return "Pronunciation regenerated.";
+  }
+
+  async function regenerateEditPronunciation() {
+    if (!editing) return;
+    const termTrim = editTerm.trim();
+    if (!termTrim) {
+      setError("Word is required to regenerate pronunciation.");
+      return;
+    }
+
+    setRegeneratingTermAudio(true);
+    setError(null);
+    setNotice(null);
+
+    const tts = await requestTermTts(termTrim);
+    if (!tts.ok) {
+      setRegeneratingTermAudio(false);
+      setError(tts.error);
+      return;
+    }
+
+    const patch = await fetch(`/api/words/${editing.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ audioPublicId: tts.audioPublicId }),
+    });
+    const patchJson = (await patch.json().catch(() => null)) as
+      | { ok: true }
+      | { error: string }
+      | null;
+
+    setRegeneratingTermAudio(false);
+
+    if (!patch.ok || !patchJson || "error" in patchJson) {
+      setError(
+        patchJson && "error" in patchJson
+          ? patchJson.error
+          : "Audio generated but could not be saved.",
+      );
+      return;
+    }
+
+    setEditing({
+      ...editing,
+      audioPublicId: tts.audioPublicId,
+      audioSrc: tts.audioSrc,
+    });
+    setNotice(ttsRegenNotice(tts));
+    await load({ silent: true });
+  }
 
   const tabs: DeckTab[] = useMemo(() => ["MIXED", "FORGOTTEN", "KNOWN"], []);
 
@@ -241,20 +343,11 @@ export default function DashboardClient() {
     let audioFailed = false;
 
     if (term.trim()) {
-      const tts = await fetch("/api/audio/tts", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ term }),
-      });
-      const ttsJson = (await tts.json().catch(() => null)) as
-        | { ok: true; audioPublicId: string; audioSrc: string }
-        | { error: string }
-        | null;
-
-      if (!tts.ok || !ttsJson || "error" in ttsJson) {
+      const tts = await requestTermTts(term.trim());
+      if (!tts.ok) {
         audioFailed = true;
       } else {
-        audioPublicId = ttsJson.audioPublicId;
+        audioPublicId = tts.audioPublicId;
       }
     }
 
@@ -315,22 +408,14 @@ export default function DashboardClient() {
     // If audio generation failed, we still save the word, then try once more.
     if (audioFailed && term.trim()) {
       try {
-        const tts = await fetch("/api/audio/tts", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ term }),
-        });
-        const ttsJson = (await tts.json().catch(() => null)) as
-          | { ok: true; audioPublicId: string; audioSrc: string }
-          | { error: string }
-          | null;
+        const tts = await requestTermTts(term.trim());
 
-        if (tts.ok && ttsJson && !("error" in ttsJson)) {
+        if (tts.ok) {
           await fetch(`/api/words/${json.word.id}`, {
             method: "PATCH",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
-              audioPublicId: ttsJson.audioPublicId,
+              audioPublicId: tts.audioPublicId,
             }),
           }).catch(() => null);
           setNotice("Saved. Audio generated successfully.");
@@ -392,18 +477,12 @@ export default function DashboardClient() {
     let audioPublicId: string | null | undefined = editing.audioPublicId;
 
     if (termTrim !== editing.term) {
-      const tts = await fetch("/api/audio/tts", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ term: termTrim }),
-      });
-      const ttsJson = (await tts.json().catch(() => null)) as
-        | { ok: true; audioPublicId: string; audioSrc: string }
-        | { error: string }
-        | null;
-
-      if (tts.ok && ttsJson && !("error" in ttsJson)) {
-        audioPublicId = ttsJson.audioPublicId;
+      const tts = await requestTermTts(termTrim);
+      if (tts.ok) {
+        audioPublicId = tts.audioPublicId;
+        if (tts.usedCloudFallback || tts.engine === "cloud") {
+          setNotice(ttsRegenNotice(tts));
+        }
       } else {
         audioPublicId = null;
         setNotice(
@@ -743,8 +822,8 @@ export default function DashboardClient() {
                 <div>
                   <div className="text-lg font-semibold">Edit card</div>
                   <div className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                    Changing the word regenerates pronunciation audio when
-                    possible.
+                    Changing the word regenerates pronunciation. Use the button
+                    below to regenerate without renaming.
                   </div>
                 </div>
                 <button
@@ -829,6 +908,38 @@ export default function DashboardClient() {
                     rows={2}
                   />
                 </label>
+
+                <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/40">
+                  <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                    Pronunciation
+                  </div>
+                  {editing.audioSrc ? (
+                    <audio
+                      key={editing.audioPublicId ?? editing.audioSrc}
+                      className="mt-2 w-full"
+                      controls
+                      src={editing.audioSrc}
+                    />
+                  ) : (
+                    <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                      No audio yet.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    className="mt-3 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium dark:border-zinc-800 dark:bg-zinc-950 disabled:opacity-60"
+                    onClick={() => void regenerateEditPronunciation()}
+                    disabled={
+                      regeneratingTermAudio ||
+                      savingEdit ||
+                      !editTerm.trim()
+                    }
+                  >
+                    {regeneratingTermAudio
+                      ? "Regenerating..."
+                      : "Regenerate pronunciation"}
+                  </button>
+                </div>
 
                 <div className="flex items-center justify-end gap-2 pt-2">
                   <button
@@ -1055,7 +1166,12 @@ function LibraryCard({
 
       <div className="mt-3 shrink-0">
         {word.audioSrc ? (
-          <audio className="w-full" controls src={word.audioSrc} />
+          <audio
+            key={word.audioPublicId ?? word.audioSrc}
+            className="w-full"
+            controls
+            src={word.audioSrc}
+          />
         ) : (
           <div className="h-10" aria-hidden />
         )}

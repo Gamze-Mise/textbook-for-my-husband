@@ -65,7 +65,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 Audio and image uploads require valid Cloudinary credentials. Email flows require working SMTP.
 
-**Pronunciation:** Default is Google Translate TTS (`tl=en`, same style as translate.google.com). Optional `GOOGLE_CLOUD_TTS_API_KEY` is used only when Translate fails, unless you set `GOOGLE_CLOUD_TTS_MODE=cloud-first` (e.g. on Vercel if Translate returns poor audio from the datacenter). TTS responses include `engine`: `"translate"` or `"cloud"`.
+**Pronunciation:** Default is Google Translate TTS (`tl=en`, same style as translate.google.com). Optional `GOOGLE_CLOUD_TTS_API_KEY` is used only when Translate fails (locally); on Vercel, Cloud fallback is **off** by default so short words like “multi” are not read as “multay” via Neural2. Set `GOOGLE_CLOUD_TTS_FALLBACK=true` if you need Cloud on Vercel. Avoid `GOOGLE_CLOUD_TTS_MODE=cloud-first` unless you want Cloud always. TTS responses include `engine` and `usedCloudFallback`.
 
 ## Scripts
 
