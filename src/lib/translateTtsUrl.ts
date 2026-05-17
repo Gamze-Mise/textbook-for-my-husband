@@ -2,7 +2,7 @@
 export const TRANSLATE_TTS_LANG = "en";
 export const TRANSLATE_TTS_HOST = "https://translate.google.com";
 
-export const TRANSLATE_TTS_CLIENTS = ["tw-ob", "gtx"] as const;
+export const TRANSLATE_TTS_CLIENTS = ["tw-ob", "gtx", "dict-chrome-experimental"] as const;
 export type TranslateTtsClient = (typeof TRANSLATE_TTS_CLIENTS)[number];
 
 export function buildTranslateTtsUrl(
@@ -30,6 +30,24 @@ export function isMp3Bytes(bytes: Uint8Array): boolean {
   return bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0;
 }
 
+export function isWebmBytes(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= 4 &&
+    bytes[0] === 0x1a &&
+    bytes[1] === 0x45 &&
+    bytes[2] === 0xdf &&
+    bytes[3] === 0xa3
+  );
+}
+
+export function isValidAudioBytes(bytes: Uint8Array): boolean {
+  return isMp3Bytes(bytes) || isWebmBytes(bytes);
+}
+
 export function isValidMp3Buffer(buf: Buffer, minBytes = 512): boolean {
   return buf.length >= minBytes && isMp3Bytes(buf.subarray(0, 4));
+}
+
+export function isValidClientAudioBuffer(buf: Buffer, minBytes = 200): boolean {
+  return buf.length >= minBytes && isValidAudioBytes(buf.subarray(0, 4));
 }

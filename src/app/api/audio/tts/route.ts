@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { synthesizeUsEnglishSpeech, type TtsEngine } from "@/lib/googleTts";
-import { isValidMp3Buffer } from "@/lib/translateTtsUrl";
+import { isValidClientAudioBuffer } from "@/lib/translateTtsUrl";
 import { uploadAudioBuffer } from "@/lib/uploadAudioBuffer";
 
 const MAX_CLIENT_AUDIO_BYTES = 512 * 1024;
@@ -45,7 +45,7 @@ export async function POST(req: Request) {
       const clientBuf = Buffer.from(clientB64, "base64");
       if (
         clientBuf.length <= MAX_CLIENT_AUDIO_BYTES &&
-        isValidMp3Buffer(clientBuf)
+        isValidClientAudioBuffer(clientBuf)
       ) {
         buffer = clientBuf;
         engine = "translate";
