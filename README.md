@@ -63,9 +63,7 @@ Open [http://localhost:3000](http://localhost:3000).
 | `CLOUDINARY_API_KEY`    | Cloudinary API key                       |
 | `CLOUDINARY_API_SECRET` | Cloudinary API secret                    |
 
-Audio and image uploads require valid Cloudinary credentials. Email flows require working SMTP.
-
-**Pronunciation:** Local dev uses Google Translate from your machine. Vercel requires `GOOGLE_CLOUD_TTS_API_KEY` (Cloud Text-to-Speech API). For Translate-quality audio on all cards, run `npm run regen:audio` on your Mac against the production database.
+Audio and image uploads require valid Cloudinary credentials. Email flows require working SMTP. Word audio uses Google Translate TTS on the server.
 
 ## Scripts
 

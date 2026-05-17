@@ -13,37 +13,9 @@ const TRANSLATE_FETCH_HEADERS = {
   "Accept-Language": "en-US,en;q=0.9",
 } as const;
 
-export type TtsEngine = "translate" | "cloud";
-
-export type SynthesizeOptions = {
-  isWord?: boolean;
-};
-
 export type SynthesizeResult = {
   buffer: Buffer;
-  engine: TtsEngine;
-  usedCloudFallback: boolean;
 };
-
-function getCloudKey(): string | undefined {
-  return process.env.GOOGLE_CLOUD_TTS_API_KEY?.trim() || undefined;
-}
-
-function isVercelProduction(): boolean {
-  return process.env.VERCEL === "1";
-}
-
-function cloudFallbackEnabled(): boolean {
-  const raw = process.env.GOOGLE_CLOUD_TTS_FALLBACK?.trim().toLowerCase();
-  if (raw === "false" || raw === "0" || raw === "no") return false;
-  return Boolean(getCloudKey());
-}
-
-function getCloudVoice(): { languageCode: "en-US"; name: string } {
-  const name =
-    process.env.GOOGLE_CLOUD_TTS_VOICE?.trim() || "en-US-Standard-A";
-  return { languageCode: "en-US", name };
-}
 
 async function fetchTranslateTtsUrl(url: string): Promise<Buffer> {
   const res = await fetch(url, { headers: TRANSLATE_FETCH_HEADERS });
@@ -75,71 +47,10 @@ async function synthesizeViaTranslateTts(text: string): Promise<Buffer> {
   throw lastErr instanceof Error ? lastErr : new Error("Translate TTS failed.");
 }
 
-async function synthesizeViaCloudTts(
-  text: string,
-  apiKey: string,
-): Promise<Buffer> {
-  const voice = getCloudVoice();
-  const res = await fetch(
-    `https://texttospeech.googleapis.com/v1/text:synthesize?key=${encodeURIComponent(apiKey)}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        input: { text },
-        voice,
-        audioConfig: { audioEncoding: "MP3", speakingRate: 1 },
-      }),
-    },
-  );
-
-  const json = (await res.json().catch(() => null)) as
-    | { audioContent?: string; error?: { message?: string } }
-    | null;
-
-  if (!res.ok || !json?.audioContent) {
-    const detail = json?.error?.message ?? `HTTP ${res.status}`;
-    throw new Error(`Cloud TTS failed: ${detail}`);
-  }
-
-  return Buffer.from(json.audioContent, "base64");
-}
-
 export async function synthesizeUsEnglishSpeech(
   text: string,
-  _options?: SynthesizeOptions,
 ): Promise<SynthesizeResult> {
   const trimmed = text.trim();
   if (!trimmed) throw new Error("Text is empty.");
-
-  const cloudKey = getCloudKey();
-  const onVercel = isVercelProduction();
-
-  if (onVercel) {
-    if (!cloudKey) {
-      throw new Error(
-        "GOOGLE_CLOUD_TTS_API_KEY is required on Vercel. Add it in Vercel env (see .env.example).",
-      );
-    }
-    return {
-      buffer: await synthesizeViaCloudTts(trimmed, cloudKey),
-      engine: "cloud",
-      usedCloudFallback: false,
-    };
-  }
-
-  try {
-    return {
-      buffer: await synthesizeViaTranslateTts(trimmed),
-      engine: "translate",
-      usedCloudFallback: false,
-    };
-  } catch {
-    if (!cloudKey || !cloudFallbackEnabled()) throw new Error("TTS failed.");
-    return {
-      buffer: await synthesizeViaCloudTts(trimmed, cloudKey),
-      engine: "cloud",
-      usedCloudFallback: true,
-    };
-  }
+  return { buffer: await synthesizeViaTranslateTts(trimmed) };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import IllustrationField from "@/components/IllustrationField";
 import { validateWordImageFile } from "@/lib/wordImageConstraints";
 import { clampImageFocus } from "@/lib/wordImageFocus";
@@ -10,7 +10,8 @@ import LogoMark from "@/components/LogoMark";
 import AlertBanner from "@/components/app/AlertBanner";
 import AppAccountMenu from "@/components/app/AppAccountMenu";
 import AppNavLink from "@/components/app/AppNavLink";
-import { requestAudioTts } from "@/lib/requestAudioTts";
+import { fetchAudioTts } from "@/lib/fetchAudioTts";
+import { isLocalDevHost } from "@/lib/isLocalDevHost";
 import {
   type DeckTab,
   type WordCard,
@@ -66,57 +67,74 @@ export default function DashboardClient() {
   const [editImageFocusX, setEditImageFocusX] = useState(50);
   const [editImageFocusY, setEditImageFocusY] = useState(50);
   const [editImageClear, setEditImageClear] = useState(false);
-  const [regeneratingTermAudio, setRegeneratingTermAudio] = useState(false);
+  const [regeneratingCardId, setRegeneratingCardId] = useState<string | null>(null);
+  const isLocalDev = useSyncExternalStore(
+    () => () => {},
+    () => isLocalDevHost(),
+    () => false,
+  );
   const [deleting, setDeleting] = useState<WordCard | null>(null);
   const [deletingNow, setDeletingNow] = useState(false);
 
-  async function regenerateEditPronunciation() {
-    if (!editing) return;
-    const termTrim = editTerm.trim();
+  async function regenerateCardAudio(word: WordCard) {
+    const termTrim = word.term.trim();
     if (!termTrim) {
-      setError("Word is required to regenerate pronunciation.");
+      setError("Word is required to regenerate audio.");
       return;
     }
 
-    setRegeneratingTermAudio(true);
+    setRegeneratingCardId(word.id);
     setError(null);
     setNotice(null);
 
-    const tts = await requestAudioTts({ term: termTrim });
-    if (!tts.ok) {
-      setRegeneratingTermAudio(false);
-      setError(
-        "Could not generate audio. Add GOOGLE_CLOUD_TTS_API_KEY on Vercel (see .env.example).",
-      );
+    const termTts = await fetchAudioTts({ term: termTrim });
+    if (!termTts.ok) {
+      setRegeneratingCardId(null);
+      setError(termTts.error);
       return;
     }
 
-    const patch = await fetch(`/api/words/${editing.id}`, {
+    const patchBody: {
+      audioPublicId: string;
+      exampleAudioPublicId?: string;
+    } = { audioPublicId: termTts.audioPublicId };
+
+    const exampleTrim = word.example?.trim();
+    if (exampleTrim) {
+      const exampleTts = await fetchAudioTts({ text: exampleTrim });
+      if (!exampleTts.ok) {
+        setRegeneratingCardId(null);
+        setError(exampleTts.error);
+        return;
+      }
+      patchBody.exampleAudioPublicId = exampleTts.audioPublicId;
+    }
+
+    const patch = await fetch(`/api/words/${word.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ audioPublicId: tts.audioPublicId }),
+      body: JSON.stringify(patchBody),
     });
     const patchJson = (await patch.json().catch(() => null)) as
-      | { ok: true }
+      | { ok: true; word: WordCard }
       | { error: string }
       | null;
 
-    setRegeneratingTermAudio(false);
+    setRegeneratingCardId(null);
 
     if (!patch.ok || !patchJson || "error" in patchJson) {
       setError("Audio generated but could not be saved.");
       return;
     }
 
-    setEditing({
-      ...editing,
-      audioPublicId: tts.audioPublicId,
-      audioSrc: tts.audioSrc,
-    });
+    if (editing?.id === word.id) {
+      setEditing(patchJson.word);
+    }
+
     setNotice(
-      tts.source === "client"
-        ? "Pronunciation saved (recorded from your browser)."
-        : "Pronunciation saved.",
+      exampleTrim
+        ? `Word and example audio regenerated for “${word.term}”.`
+        : `Word audio regenerated for “${word.term}”.`,
     );
     await load({ silent: true });
   }
@@ -234,7 +252,7 @@ export default function DashboardClient() {
     const ex = exampleText.trim();
     if (!ex) return { ok: true as const };
 
-    const tts = await requestAudioTts({ text: ex });
+    const tts = await fetchAudioTts({ text: ex });
     if (!tts.ok) {
       return {
         ok: false as const,
@@ -286,7 +304,7 @@ export default function DashboardClient() {
     let audioFailed = false;
 
     if (term.trim()) {
-      const tts = await requestAudioTts({ term: term.trim() });
+      const tts = await fetchAudioTts({ term: term.trim() });
       if (tts.ok) {
         audioPublicId = tts.audioPublicId;
       } else {
@@ -349,7 +367,7 @@ export default function DashboardClient() {
     }
 
     if (audioFailed && term.trim()) {
-      const tts = await requestAudioTts({ term: term.trim() });
+      const tts = await fetchAudioTts({ term: term.trim() });
       if (tts.ok) {
         await fetch(`/api/words/${json.word.id}`, {
           method: "PATCH",
@@ -359,7 +377,7 @@ export default function DashboardClient() {
         setNotice("Saved. Pronunciation generated on retry.");
       } else {
         setNotice(
-          "Saved without audio. Add GOOGLE_CLOUD_TTS_API_KEY on Vercel (see .env.example).",
+          "Saved without audio. Check Cloudinary settings.",
         );
       }
     }
@@ -410,13 +428,13 @@ export default function DashboardClient() {
     let audioPublicId: string | null | undefined = editing.audioPublicId;
 
     if (termTrim !== editing.term) {
-      const tts = await requestAudioTts({ term: termTrim });
+      const tts = await fetchAudioTts({ term: termTrim });
       if (tts.ok) {
         audioPublicId = tts.audioPublicId;
       } else {
         audioPublicId = null;
         setNotice(
-          "Term updated; pronunciation could not be regenerated. Add GOOGLE_CLOUD_TTS_API_KEY on Vercel.",
+          "Term updated; pronunciation could not be regenerated.",
         );
       }
     }
@@ -626,6 +644,9 @@ export default function DashboardClient() {
             <div key={w.id} className="h-full min-h-0">
               <LibraryCard
                 word={w}
+                isLocalDev={isLocalDev}
+                isRegenerating={regeneratingCardId === w.id}
+                onRegenerate={regenerateCardAudio}
                 onEdit={openEdit}
                 onDelete={(word) => setDeleting(word)}
               />
@@ -751,9 +772,6 @@ export default function DashboardClient() {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="text-lg font-semibold">Edit card</div>
-                  <div className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                    Changing the word regenerates pronunciation audio.
-                  </div>
                 </div>
                 <button
                   className="rounded-lg px-2 py-1 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
@@ -837,38 +855,6 @@ export default function DashboardClient() {
                     rows={2}
                   />
                 </label>
-
-                <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/40">
-                  <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                    Pronunciation
-                  </div>
-                  {editing.audioSrc ? (
-                    <audio
-                      key={editing.audioPublicId ?? editing.audioSrc}
-                      className="mt-2 w-full"
-                      controls
-                      src={editing.audioSrc}
-                    />
-                  ) : (
-                    <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-                      No saved audio yet. Save or regenerate pronunciation.
-                    </p>
-                  )}
-                  <button
-                    type="button"
-                    className="mt-3 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium dark:border-zinc-800 dark:bg-zinc-950 disabled:opacity-60"
-                    onClick={() => void regenerateEditPronunciation()}
-                    disabled={
-                      regeneratingTermAudio ||
-                      savingEdit ||
-                      !editTerm.trim()
-                    }
-                  >
-                    {regeneratingTermAudio
-                      ? "Regenerating..."
-                      : "Regenerate pronunciation"}
-                  </button>
-                </div>
 
                 <div className="flex items-center justify-end gap-2 pt-2">
                   <button
@@ -956,10 +942,16 @@ export default function DashboardClient() {
 
 function LibraryCard({
   word,
+  isLocalDev,
+  isRegenerating,
+  onRegenerate,
   onEdit,
   onDelete,
 }: {
   word: WordCard;
+  isLocalDev: boolean;
+  isRegenerating: boolean;
+  onRegenerate: (w: WordCard) => void;
   onEdit: (w: WordCard) => void;
   onDelete: (w: WordCard) => void;
 }) {
@@ -1036,6 +1028,20 @@ function LibraryCard({
 
   return (
     <div className="group flex h-full min-h-88 flex-col rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950">
+      {isLocalDev ? (
+        <button
+          type="button"
+          className="mb-3 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-medium text-zinc-800 disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-200"
+          onClick={(e) => {
+            e.stopPropagation();
+            void onRegenerate(word);
+          }}
+          disabled={isRegenerating || !word.term.trim()}
+        >
+          {isRegenerating ? "Regenerating audio…" : "Regenerate audio"}
+        </button>
+      ) : null}
+
       <div className="relative shrink-0 overflow-hidden rounded-xl ring-1 ring-zinc-200/80 dark:ring-zinc-800">
         <span
           className={[

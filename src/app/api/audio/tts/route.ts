@@ -2,17 +2,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { synthesizeUsEnglishSpeech, type TtsEngine } from "@/lib/googleTts";
-import { isValidMp3Buffer } from "@/lib/translateTtsUrl";
+import { synthesizeUsEnglishSpeech } from "@/lib/googleTts";
 import { uploadAudioBuffer } from "@/lib/uploadAudioBuffer";
-
-const MAX_CLIENT_AUDIO_BYTES = 512 * 1024;
 
 const bodySchema = z
   .object({
     term: z.string().min(1).max(64).optional(),
     text: z.string().min(1).max(600).optional(),
-    audioBase64: z.string().min(64).max(700_000).optional(),
   })
   .refine((v) => Boolean(v.term?.trim() || v.text?.trim()), {
     message: "Either term or text is required.",
@@ -35,47 +31,10 @@ export async function POST(req: Request) {
     : "textbook/audio/word";
 
   let buffer: Buffer;
-  let engine: TtsEngine = "translate";
-  let usedCloudFallback = false;
-  let source: "client" | "server" = "server";
-
-  const clientB64 = parsed.data.audioBase64?.trim();
-  if (clientB64) {
-    try {
-      const clientBuf = Buffer.from(clientB64, "base64");
-      if (
-        clientBuf.length <= MAX_CLIENT_AUDIO_BYTES &&
-        isValidMp3Buffer(clientBuf)
-      ) {
-        buffer = clientBuf;
-        engine = "translate";
-        source = "client";
-      } else {
-        return NextResponse.json(
-          { error: "Invalid client audio." },
-          { status: 400 },
-        );
-      }
-    } catch {
-      return NextResponse.json(
-        { error: "Invalid client audio." },
-        { status: 400 },
-      );
-    }
-  } else {
-    try {
-      ({ buffer, engine, usedCloudFallback } = await synthesizeUsEnglishSpeech(
-        raw,
-        { isWord: Boolean(parsed.data.term?.trim()) },
-      ));
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "TTS request failed.";
-      const needsKey = msg.includes("GOOGLE_CLOUD_TTS_API_KEY");
-      return NextResponse.json(
-        { error: needsKey ? msg : "TTS request failed." },
-        { status: needsKey ? 503 : 502 },
-      );
-    }
+  try {
+    ({ buffer } = await synthesizeUsEnglishSpeech(raw));
+  } catch {
+    return NextResponse.json({ error: "TTS request failed." }, { status: 502 });
   }
 
   const safe = raw.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40);
@@ -92,9 +51,6 @@ export async function POST(req: Request) {
       ok: true,
       audioPublicId: uploaded.audioPublicId,
       audioSrc: uploaded.audioSrc,
-      engine,
-      source,
-      usedCloudFallback,
     });
   } catch (e) {
     const msg =

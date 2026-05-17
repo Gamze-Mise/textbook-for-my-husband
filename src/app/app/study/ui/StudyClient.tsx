@@ -7,7 +7,7 @@ import AppAccountMenu from "@/components/app/AppAccountMenu";
 import AlertBanner from "@/components/app/AlertBanner";
 import WordImage from "@/components/WordImage";
 import { tabPillActive, tabPillIdle } from "@/components/ui/buttonClasses";
-import { requestAudioTts } from "@/lib/requestAudioTts";
+import { fetchAudioTts } from "@/lib/fetchAudioTts";
 import { type DeckTab, type WordCard, STUDY_DECK_TABS, deckTabLabel } from "@/types/word";
 
 /** Rotating block: one physical “card” slab (both faces + actions). */
@@ -165,7 +165,7 @@ export default function StudyClient() {
     const ac = new AbortController();
     void (async () => {
       try {
-        const json = await requestAudioTts({
+        const json = await fetchAudioTts({
           text: current.example!.trim(),
         });
         if (!json.ok) return;
