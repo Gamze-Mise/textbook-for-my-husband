@@ -65,7 +65,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 Audio and image uploads require valid Cloudinary credentials. Email flows require working SMTP.
 
-**Pronunciation:** The app tries **browser** Google Translate TTS first (your IP — matches local), then uploads to Cloudinary. If the browser cannot fetch (CORS), the server synthesizes instead. Optional `GOOGLE_CLOUD_TTS_*` vars are only for explicit Cloud fallback. API responses include `source`: `"client"` or `"server"`, plus `engine`.
+**Pronunciation:** Word audio plays from **Google Translate in the browser** (same as translate.google.com). Example sentences may still use stored Cloudinary audio from the server. Optional `GOOGLE_CLOUD_TTS_*` env vars are only for server-side example/fallback synthesis.
 
 ## Scripts
 

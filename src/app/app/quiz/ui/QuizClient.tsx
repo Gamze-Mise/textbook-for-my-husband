@@ -249,11 +249,11 @@ export default function QuizClient() {
               <h2 className="shrink-0 text-2xl font-semibold leading-tight tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-3xl">
                 {current.term}
               </h2>
-              {current.audioSrc ? (
+              {current.playbackAudioSrc ? (
                 <audio
                   className="h-9 w-full shrink-0 rounded-lg"
                   controls
-                  src={current.audioSrc}
+                  src={current.playbackAudioSrc}
                   tabIndex={-1}
                 />
               ) : null}

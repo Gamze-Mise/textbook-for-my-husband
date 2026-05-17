@@ -362,12 +362,12 @@ export default function StudyClient() {
                       </div>
                     </div>
                     <div className={AUDIO_SLOT}>
-                      {current.audioSrc ? (
+                      {current.playbackAudioSrc ? (
                         <audio
                           className="h-10 w-full rounded-lg outline-none focus:outline-none focus-visible:outline-none"
                           controls
                           tabIndex={-1}
-                          src={current.audioSrc}
+                          src={current.playbackAudioSrc}
                           onClick={(e) => e.stopPropagation()}
                         />
                       ) : (
@@ -428,8 +428,7 @@ export default function StudyClient() {
                       </div>
                     </div>
                     <div className={AUDIO_SLOT}>
-                      {current.audioSrc ||
-                      current.exampleAudioSrc ||
+                      {current.exampleAudioSrc ||
                       exampleSrcOverride[current.id] ? (
                         <audio
                           className="h-10 w-full rounded-lg outline-none focus:outline-none focus-visible:outline-none"
@@ -438,7 +437,6 @@ export default function StudyClient() {
                           src={
                             current.exampleAudioSrc ||
                             exampleSrcOverride[current.id] ||
-                            current.audioSrc ||
                             undefined
                           }
                           onClick={(e) => e.stopPropagation()}

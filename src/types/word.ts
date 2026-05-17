@@ -12,7 +12,10 @@ export type WordCard = {
   bucket: WordBucket;
   audioPublicId?: string | null;
   exampleAudioPublicId?: string | null;
+  /** Stored Cloudinary URL (may be absent). */
   audioSrc: string | null;
+  /** Use this in <audio> for the word — live Google Translate in the browser. */
+  playbackAudioSrc: string | null;
   exampleAudioSrc?: string | null;
   imagePublicId?: string | null;
   imageSrc?: string | null;
