@@ -15,19 +15,15 @@ const TRANSLATE_FETCH_HEADERS = {
 
 export type TtsEngine = "translate" | "cloud";
 
+export type SynthesizeOptions = {
+  isWord?: boolean;
+};
+
 export type SynthesizeResult = {
   buffer: Buffer;
   engine: TtsEngine;
   usedCloudFallback: boolean;
 };
-
-type TtsMode = "translate-first" | "cloud-first";
-
-function getTtsMode(): TtsMode {
-  const raw = process.env.GOOGLE_CLOUD_TTS_MODE?.trim().toLowerCase();
-  if (raw === "cloud-first" || raw === "primary") return "cloud-first";
-  return "translate-first";
-}
 
 function getCloudKey(): string | undefined {
   return process.env.GOOGLE_CLOUD_TTS_API_KEY?.trim() || undefined;
@@ -37,21 +33,15 @@ function isVercelProduction(): boolean {
   return process.env.VERCEL === "1";
 }
 
-/** Vercel Translate IP ≠ your home IP (e.g. "multi" → "multay"). Use Cloud TTS on Vercel. */
-function mustUseCloudOnServer(): boolean {
-  return isVercelProduction() && Boolean(getCloudKey());
-}
-
 function cloudFallbackEnabled(): boolean {
   const raw = process.env.GOOGLE_CLOUD_TTS_FALLBACK?.trim().toLowerCase();
   if (raw === "false" || raw === "0" || raw === "no") return false;
-  if (raw === "true" || raw === "1" || raw === "yes") return true;
   return Boolean(getCloudKey());
 }
 
 function getCloudVoice(): { languageCode: "en-US"; name: string } {
   const name =
-    process.env.GOOGLE_CLOUD_TTS_VOICE?.trim() || "en-US-Wavenet-D";
+    process.env.GOOGLE_CLOUD_TTS_VOICE?.trim() || "en-US-Standard-A";
   return { languageCode: "en-US", name };
 }
 
@@ -115,36 +105,27 @@ async function synthesizeViaCloudTts(
   return Buffer.from(json.audioContent, "base64");
 }
 
-export async function synthesizeUsEnglishSpeech(text: string): Promise<SynthesizeResult> {
+export async function synthesizeUsEnglishSpeech(
+  text: string,
+  _options?: SynthesizeOptions,
+): Promise<SynthesizeResult> {
   const trimmed = text.trim();
   if (!trimmed) throw new Error("Text is empty.");
 
   const cloudKey = getCloudKey();
-  const mode = getTtsMode();
-  const allowCloudFallback = cloudFallbackEnabled();
-  const vercelCloudOnly = mustUseCloudOnServer();
+  const onVercel = isVercelProduction();
 
-  if (isVercelProduction() && !cloudKey) {
-    throw new Error(
-      "GOOGLE_CLOUD_TTS_API_KEY is required on Vercel. Google Translate from the server sounds wrong (e.g. “multay” for “multi”).",
-    );
-  }
-
-  if ((vercelCloudOnly || mode === "cloud-first") && cloudKey) {
-    try {
-      return {
-        buffer: await synthesizeViaCloudTts(trimmed, cloudKey),
-        engine: "cloud",
-        usedCloudFallback: false,
-      };
-    } catch (e) {
-      if (vercelCloudOnly) throw e;
-      return {
-        buffer: await synthesizeViaTranslateTts(trimmed),
-        engine: "translate",
-        usedCloudFallback: true,
-      };
+  if (onVercel) {
+    if (!cloudKey) {
+      throw new Error(
+        "GOOGLE_CLOUD_TTS_API_KEY is required on Vercel. Add it in Vercel env (see .env.example).",
+      );
     }
+    return {
+      buffer: await synthesizeViaCloudTts(trimmed, cloudKey),
+      engine: "cloud",
+      usedCloudFallback: false,
+    };
   }
 
   try {
@@ -154,7 +135,7 @@ export async function synthesizeUsEnglishSpeech(text: string): Promise<Synthesiz
       usedCloudFallback: false,
     };
   } catch {
-    if (!cloudKey || !allowCloudFallback) throw new Error("TTS failed.");
+    if (!cloudKey || !cloudFallbackEnabled()) throw new Error("TTS failed.");
     return {
       buffer: await synthesizeViaCloudTts(trimmed, cloudKey),
       engine: "cloud",

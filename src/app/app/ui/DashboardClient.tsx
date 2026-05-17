@@ -86,7 +86,7 @@ export default function DashboardClient() {
     if (!tts.ok) {
       setRegeneratingTermAudio(false);
       setError(
-        "Could not generate audio. On Vercel, set GOOGLE_CLOUD_TTS_API_KEY (see .env.example).",
+        "Could not generate audio. Add GOOGLE_CLOUD_TTS_API_KEY on Vercel (see .env.example).",
       );
       return;
     }
@@ -416,7 +416,7 @@ export default function DashboardClient() {
       } else {
         audioPublicId = null;
         setNotice(
-          "Term updated; pronunciation could not be regenerated. Set GOOGLE_CLOUD_TTS_API_KEY on Vercel.",
+          "Term updated; pronunciation could not be regenerated. Add GOOGLE_CLOUD_TTS_API_KEY on Vercel.",
         );
       }
     }

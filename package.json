@@ -12,7 +12,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "postinstall": "prisma generate",
-    "vercel-build": "prisma migrate deploy && prisma generate && next build"
+    "vercel-build": "prisma migrate deploy && prisma generate && next build",
+    "regen:audio": "node scripts/regen-audio.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",
