@@ -26,9 +26,10 @@ export async function POST(req: Request) {
   }
 
   const raw = (parsed.data.text ?? parsed.data.term ?? "").trim();
+  const userId = session.user.id;
   const folder = parsed.data.text?.trim()
-    ? "textbook/audio/example"
-    : "textbook/audio/word";
+    ? `example/${userId}`
+    : `word/${userId}`;
 
   let buffer: Buffer;
   try {
