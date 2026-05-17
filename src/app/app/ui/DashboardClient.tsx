@@ -11,7 +11,6 @@ import AlertBanner from "@/components/app/AlertBanner";
 import AppAccountMenu from "@/components/app/AppAccountMenu";
 import AppNavLink from "@/components/app/AppNavLink";
 import { requestAudioTts } from "@/lib/requestAudioTts";
-import { wordPlaybackAudioSrc } from "@/lib/wordAudioPlayback";
 import {
   type DeckTab,
   type WordCard,
@@ -75,28 +74,54 @@ export default function DashboardClient() {
     if (!editing) return;
     const termTrim = editTerm.trim();
     if (!termTrim) {
-      setError("Word is required to preview pronunciation.");
+      setError("Word is required to regenerate pronunciation.");
       return;
     }
 
     setRegeneratingTermAudio(true);
     setError(null);
-    setNotice(
-      "Word audio plays live from Google Translate in your browser (same as translate.google.com).",
-    );
+    setNotice(null);
+
+    const tts = await requestAudioTts({ term: termTrim });
+    if (!tts.ok) {
+      setRegeneratingTermAudio(false);
+      setError(
+        "Could not generate audio. On Vercel, set GOOGLE_CLOUD_TTS_API_KEY (see .env.example).",
+      );
+      return;
+    }
+
+    const patch = await fetch(`/api/words/${editing.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ audioPublicId: tts.audioPublicId }),
+    });
+    const patchJson = (await patch.json().catch(() => null)) as
+      | { ok: true }
+      | { error: string }
+      | null;
+
+    setRegeneratingTermAudio(false);
+
+    if (!patch.ok || !patchJson || "error" in patchJson) {
+      setError("Audio generated but could not be saved.");
+      return;
+    }
+
     setEditing({
       ...editing,
-      playbackAudioSrc: wordPlaybackAudioSrc(termTrim, editing.audioSrc),
+      audioPublicId: tts.audioPublicId,
+      audioSrc: tts.audioSrc,
     });
-    setRegeneratingTermAudio(false);
+    setNotice(
+      tts.source === "client"
+        ? "Pronunciation saved (recorded from your browser)."
+        : "Pronunciation saved.",
+    );
+    await load({ silent: true });
   }
 
   const tabs: DeckTab[] = useMemo(() => ["MIXED", "FORGOTTEN", "KNOWN"], []);
-
-  const editPlaybackSrc = useMemo(() => {
-    if (!editing) return null;
-    return wordPlaybackAudioSrc(editTerm.trim(), editing.audioSrc);
-  }, [editing, editTerm]);
 
   async function load(opts?: { silent?: boolean }) {
     if (!opts?.silent) setLoading(true);
@@ -118,7 +143,7 @@ export default function DashboardClient() {
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
@@ -257,6 +282,18 @@ export default function DashboardClient() {
     setError(null);
     setNotice(null);
 
+    let audioPublicId: string | undefined;
+    let audioFailed = false;
+
+    if (term.trim()) {
+      const tts = await requestAudioTts({ term: term.trim() });
+      if (tts.ok) {
+        audioPublicId = tts.audioPublicId;
+      } else {
+        audioFailed = true;
+      }
+    }
+
     let imagePublicId: string | undefined;
     if (addImageFile) {
       const invalid = validateWordImageFile(addImageFile);
@@ -284,6 +321,7 @@ export default function DashboardClient() {
         example: example || undefined,
         // New words always start in "Needs review"
         bucket: "FORGOTTEN",
+        audioPublicId,
         ...(imagePublicId
           ? {
               imagePublicId,
@@ -308,6 +346,22 @@ export default function DashboardClient() {
     if (example.trim()) {
       const ex = await persistExampleAudio(json.word.id, example);
       if (!ex.ok) setNotice(ex.error);
+    }
+
+    if (audioFailed && term.trim()) {
+      const tts = await requestAudioTts({ term: term.trim() });
+      if (tts.ok) {
+        await fetch(`/api/words/${json.word.id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ audioPublicId: tts.audioPublicId }),
+        }).catch(() => null);
+        setNotice("Saved. Pronunciation generated on retry.");
+      } else {
+        setNotice(
+          "Saved without audio. Add GOOGLE_CLOUD_TTS_API_KEY on Vercel (see .env.example).",
+        );
+      }
     }
 
     setSaving(false);
@@ -351,6 +405,20 @@ export default function DashboardClient() {
       setSavingEdit(false);
       setError("Word and meaning are required.");
       return;
+    }
+
+    let audioPublicId: string | null | undefined = editing.audioPublicId;
+
+    if (termTrim !== editing.term) {
+      const tts = await requestAudioTts({ term: termTrim });
+      if (tts.ok) {
+        audioPublicId = tts.audioPublicId;
+      } else {
+        audioPublicId = null;
+        setNotice(
+          "Term updated; pronunciation could not be regenerated. Set GOOGLE_CLOUD_TTS_API_KEY on Vercel.",
+        );
+      }
     }
 
     let nextImagePublicId: string | null | undefined = undefined;
@@ -411,6 +479,7 @@ export default function DashboardClient() {
         ...(editExample.trim() !== (editing.example ?? "").trim()
           ? { exampleAudioPublicId: null }
           : {}),
+        ...(audioPublicId !== editing.audioPublicId ? { audioPublicId } : {}),
         ...(nextImagePublicId !== undefined
           ? { imagePublicId: nextImagePublicId }
           : {}),
@@ -683,7 +752,7 @@ export default function DashboardClient() {
                 <div>
                   <div className="text-lg font-semibold">Edit card</div>
                   <div className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                    Word audio plays live from Google Translate in your browser.
+                    Changing the word regenerates pronunciation audio.
                   </div>
                 </div>
                 <button
@@ -773,16 +842,16 @@ export default function DashboardClient() {
                   <div className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                     Pronunciation
                   </div>
-                  {editPlaybackSrc ? (
+                  {editing.audioSrc ? (
                     <audio
-                      key={editPlaybackSrc}
+                      key={editing.audioPublicId ?? editing.audioSrc}
                       className="mt-2 w-full"
                       controls
-                      src={editPlaybackSrc}
+                      src={editing.audioSrc}
                     />
                   ) : (
                     <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-                      Enter a word to preview pronunciation.
+                      No saved audio yet. Save or regenerate pronunciation.
                     </p>
                   )}
                   <button
@@ -795,7 +864,9 @@ export default function DashboardClient() {
                       !editTerm.trim()
                     }
                   >
-                    {regeneratingTermAudio ? "Updating..." : "Refresh preview"}
+                    {regeneratingTermAudio
+                      ? "Regenerating..."
+                      : "Regenerate pronunciation"}
                   </button>
                 </div>
 
@@ -1023,12 +1094,12 @@ function LibraryCard({
       </div>
 
       <div className="mt-3 shrink-0">
-        {word.playbackAudioSrc ? (
+        {word.audioSrc ? (
           <audio
-            key={word.playbackAudioSrc}
+            key={word.audioPublicId ?? word.audioSrc}
             className="w-full"
             controls
-            src={word.playbackAudioSrc}
+            src={word.audioSrc}
           />
         ) : (
           <div className="h-10" aria-hidden />

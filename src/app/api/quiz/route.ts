@@ -83,7 +83,6 @@ function buildQuestionForWord(w: Word, allWords: Word[]): QuizQuestion | null {
     term: c.term,
     imageSrc: c.imageSrc,
     audioSrc: c.audioSrc,
-    playbackAudioSrc: c.playbackAudioSrc,
     example: c.example,
     imageObjectPosition: c.imageObjectPosition,
     bucket: c.bucket,

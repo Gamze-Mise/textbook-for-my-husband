@@ -4,11 +4,9 @@ import {
   cloudinaryVideoDeliveryUrl,
 } from "@/lib/cloudinaryDelivery";
 import { objectPositionFromFocus } from "@/lib/wordImageFocus";
-import { wordPlaybackAudioSrc } from "@/lib/wordAudioPlayback";
 
 /** API/client payload: only Cloudinary ids in DB; playback URLs derived at read time. */
 export function wordToClient(w: Word) {
-  const audioSrc = cloudinaryVideoDeliveryUrl(w.audioPublicId);
   return {
     id: String(w.id),
     term: w.term,
@@ -17,8 +15,7 @@ export function wordToClient(w: Word) {
     bucket: w.bucket,
     audioPublicId: w.audioPublicId,
     exampleAudioPublicId: w.exampleAudioPublicId,
-    audioSrc,
-    playbackAudioSrc: wordPlaybackAudioSrc(w.term, audioSrc),
+    audioSrc: cloudinaryVideoDeliveryUrl(w.audioPublicId),
     exampleAudioSrc: cloudinaryVideoDeliveryUrl(w.exampleAudioPublicId),
     imagePublicId: w.imagePublicId,
     imageSrc: cloudinaryImageDeliveryUrl(w.imagePublicId),

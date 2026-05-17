@@ -18,7 +18,6 @@ export type TtsEngine = "translate" | "cloud";
 export type SynthesizeResult = {
   buffer: Buffer;
   engine: TtsEngine;
-  /** True when Translate failed and Cloud TTS was used instead. */
   usedCloudFallback: boolean;
 };
 
@@ -30,18 +29,28 @@ function getTtsMode(): TtsMode {
   return "translate-first";
 }
 
+function getCloudKey(): string | undefined {
+  return process.env.GOOGLE_CLOUD_TTS_API_KEY?.trim() || undefined;
+}
+
+/** On Vercel, Translate TTS often differs from local (e.g. "multi" → "multay"). Prefer Cloud when keyed. */
+function preferCloudOnServer(): boolean {
+  const cloudKey = getCloudKey();
+  if (!cloudKey) return false;
+  if (getTtsMode() === "cloud-first") return true;
+  return process.env.VERCEL === "1";
+}
+
 function cloudFallbackEnabled(): boolean {
   const raw = process.env.GOOGLE_CLOUD_TTS_FALLBACK?.trim().toLowerCase();
   if (raw === "false" || raw === "0" || raw === "no") return false;
   if (raw === "true" || raw === "1" || raw === "yes") return true;
-  // On Vercel, Translate usually works; Cloud Neural2 often mispronounces short words (e.g. "multi" → "multay").
-  if (process.env.VERCEL === "1") return false;
-  return true;
+  return Boolean(getCloudKey());
 }
 
 function getCloudVoice(): { languageCode: "en-US"; name: string } {
   const name =
-    process.env.GOOGLE_CLOUD_TTS_VOICE?.trim() || "en-US-Neural2-D";
+    process.env.GOOGLE_CLOUD_TTS_VOICE?.trim() || "en-US-Standard-D";
   return { languageCode: "en-US", name };
 }
 
@@ -105,16 +114,15 @@ async function synthesizeViaCloudTts(
   return Buffer.from(json.audioContent, "base64");
 }
 
-/** Translate first; Cloud TTS when key is set and Translate fails (or mode=cloud-first). */
 export async function synthesizeUsEnglishSpeech(text: string): Promise<SynthesizeResult> {
   const trimmed = text.trim();
   if (!trimmed) throw new Error("Text is empty.");
 
-  const cloudKey = process.env.GOOGLE_CLOUD_TTS_API_KEY?.trim();
-  const mode = getTtsMode();
+  const cloudKey = getCloudKey();
+  const useCloudFirst = preferCloudOnServer();
   const allowCloudFallback = cloudFallbackEnabled();
 
-  if (mode === "cloud-first" && cloudKey) {
+  if (useCloudFirst && cloudKey) {
     try {
       return {
         buffer: await synthesizeViaCloudTts(trimmed, cloudKey),
@@ -125,7 +133,7 @@ export async function synthesizeUsEnglishSpeech(text: string): Promise<Synthesiz
       return {
         buffer: await synthesizeViaTranslateTts(trimmed),
         engine: "translate",
-        usedCloudFallback: false,
+        usedCloudFallback: true,
       };
     }
   }

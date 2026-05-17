@@ -65,7 +65,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 Audio and image uploads require valid Cloudinary credentials. Email flows require working SMTP.
 
-**Pronunciation:** Word audio plays from **Google Translate in the browser** (same as translate.google.com). Example sentences may still use stored Cloudinary audio from the server. Optional `GOOGLE_CLOUD_TTS_*` env vars are only for server-side example/fallback synthesis.
+**Pronunciation:** Words are saved as MP3 on Cloudinary. On save, the app tries to capture audio from your browser (Google Translate); on Vercel it uses **Google Cloud Text-to-Speech** when `GOOGLE_CLOUD_TTS_API_KEY` is set (enable the API in GCP, add the key to Vercel env). Default voice: `en-US-Standard-D`.
 
 ## Scripts
 
