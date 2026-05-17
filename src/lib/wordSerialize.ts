@@ -3,7 +3,7 @@ import {
   cloudinaryDeliveryPublicId,
   cloudinaryExampleAudioFolder,
   cloudinaryWordAudioFolder,
-  cloudinaryWordImageFolder,
+  cloudinaryWordImageDeliveryPublicId,
 } from "@/lib/cloudinaryAsset";
 import {
   cloudinaryImageDeliveryUrl,
@@ -15,8 +15,6 @@ import { objectPositionFromFocus } from "@/lib/wordImageFocus";
 export function wordToClient(w: Word) {
   const wordAudioFolder = cloudinaryWordAudioFolder(w.userId);
   const exampleAudioFolder = cloudinaryExampleAudioFolder(w.userId);
-  const imageFolder = cloudinaryWordImageFolder(w.userId);
-
   return {
     id: String(w.id),
     term: w.term,
@@ -33,7 +31,7 @@ export function wordToClient(w: Word) {
     ),
     imagePublicId: w.imagePublicId,
     imageSrc: cloudinaryImageDeliveryUrl(
-      cloudinaryDeliveryPublicId(w.imagePublicId, imageFolder),
+      cloudinaryWordImageDeliveryPublicId(w.imagePublicId, w.userId),
     ),
     imageFocusX: w.imageFocusX,
     imageFocusY: w.imageFocusY,

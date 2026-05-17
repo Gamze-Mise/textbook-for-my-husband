@@ -12,9 +12,12 @@ import {
 } from "@/lib/cloudinaryAsset";
 import {
   deleteCloudinaryAsset,
+  deleteCloudinaryAssetByPublicId,
   deleteWordCloudinaryAssets,
   queueCloudinaryAssetReplace,
+  queueCloudinaryImageReplace,
   type CloudinaryAssetDeleteJob,
+  type CloudinaryResolvedDeleteJob,
 } from "@/lib/deleteCloudinaryAsset";
 import { wordToClient } from "@/lib/wordSerialize";
 
@@ -68,6 +71,7 @@ export async function PATCH(
     const p = parsed.data;
     const data: Prisma.WordUncheckedUpdateInput = {};
     const cloudinaryDeletes: CloudinaryAssetDeleteJob[] = [];
+    const cloudinaryImageDeletes: CloudinaryResolvedDeleteJob[] = [];
 
     if (p.bucket !== undefined && p.bucket !== word.bucket) {
       data.bucket = p.bucket;
@@ -110,11 +114,10 @@ export async function PATCH(
     }
     if (p.imagePublicId !== undefined) {
       const next = normalizeStoredPublicId(p.imagePublicId, imageFolder);
-      queueCloudinaryAssetReplace(cloudinaryDeletes, {
+      queueCloudinaryImageReplace(cloudinaryImageDeletes, {
         previous: word.imagePublicId,
         next,
-        folder: imageFolder,
-        resourceType: "image",
+        userId: word.userId,
       });
       if (!sameNullableString(next, word.imagePublicId)) {
         data.imagePublicId = next;
@@ -138,10 +141,13 @@ export async function PATCH(
         ? await prisma.word.update({ where: { id: wordId }, data })
         : word;
 
-    if (cloudinaryDeletes.length > 0) {
-      await Promise.allSettled(
-        cloudinaryDeletes.map((job) => deleteCloudinaryAsset(job)),
-      );
+    if (cloudinaryDeletes.length > 0 || cloudinaryImageDeletes.length > 0) {
+      await Promise.allSettled([
+        ...cloudinaryDeletes.map((job) => deleteCloudinaryAsset(job)),
+        ...cloudinaryImageDeletes.map((job) =>
+          deleteCloudinaryAssetByPublicId(job.publicId, job.resourceType),
+        ),
+      ]);
     }
 
     return NextResponse.json({ ok: true, word: wordToClient(updated) });

@@ -13,6 +13,29 @@ export function cloudinaryWordImageFolder(userId: number | string): string {
   return `textbook/images/word/${userId}`;
 }
 
+/** Legacy flat image folder (`textbook/word-images/u2-*`) before per-user subfolders. */
+export function cloudinaryLegacyWordImageFolder(): string {
+  return "textbook/word-images";
+}
+
+/**
+ * Resolve image public_id for delivery. New uploads use `textbook/images/word/{id}/`;
+ * legacy files remain at `textbook/word-images/u{id}-*`.
+ */
+export function cloudinaryWordImageDeliveryPublicId(
+  stored: string | null | undefined,
+  userId: number | string,
+): string | null {
+  const id = stored?.trim();
+  if (!id) return null;
+  if (id.includes("/")) return id;
+  const uid = String(userId);
+  if (id.startsWith(`u${uid}-`)) {
+    return `${cloudinaryLegacyWordImageFolder()}/${id}`;
+  }
+  return `${cloudinaryWordImageFolder(userId)}/${id}`;
+}
+
 /** Strip folder prefix so only the basename is stored in the DB. */
 export function cloudinaryStoragePublicId(
   fullOrBase: string,

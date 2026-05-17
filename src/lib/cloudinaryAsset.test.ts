@@ -5,6 +5,7 @@ import {
   cloudinaryExampleAudioFolder,
   cloudinaryStoragePublicId,
   cloudinaryWordAudioFolder,
+  cloudinaryWordImageDeliveryPublicId,
   cloudinaryWordImageFolder,
   normalizeStoredPublicId,
 } from "./cloudinaryAsset";
@@ -37,6 +38,17 @@ describe("cloudinaryAsset", () => {
   it("keeps legacy full paths for delivery", () => {
     const legacy = `textbook/word/2/${base}`;
     assert.equal(cloudinaryDeliveryPublicId(legacy, audioFolder), legacy);
+  });
+
+  it("resolves legacy word-images delivery path", () => {
+    assert.equal(
+      cloudinaryWordImageDeliveryPublicId("u2-1779007313729", 2),
+      "textbook/word-images/u2-1779007313729",
+    );
+    assert.equal(
+      cloudinaryWordImageDeliveryPublicId("img-1", 2),
+      "textbook/images/word/2/img-1",
+    );
   });
 
   it("normalizes nullable values for DB", () => {
