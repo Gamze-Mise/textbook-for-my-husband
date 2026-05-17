@@ -66,8 +66,13 @@ export async function POST(req: Request) {
     try {
       ({ buffer, engine, usedCloudFallback } =
         await synthesizeUsEnglishSpeech(raw));
-    } catch {
-      return NextResponse.json({ error: "TTS request failed." }, { status: 502 });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "TTS request failed.";
+      const needsKey = msg.includes("GOOGLE_CLOUD_TTS_API_KEY");
+      return NextResponse.json(
+        { error: needsKey ? msg : "TTS request failed." },
+        { status: needsKey ? 503 : 502 },
+      );
     }
   }
 

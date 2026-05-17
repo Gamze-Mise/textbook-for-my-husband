@@ -53,12 +53,15 @@ export async function requestAudioTts(body: TtsBody): Promise<AudioTtsResult> {
     | null;
 
   if (!tts.ok || !ttsJson || "error" in ttsJson) {
+    const apiError =
+      ttsJson && "error" in ttsJson ? ttsJson.error : undefined;
     return {
       ok: false,
       error:
-        ttsJson && "error" in ttsJson
-          ? ttsJson.error
-          : "Pronunciation could not be generated.",
+        apiError ??
+        (tts.status === 503
+          ? "Add GOOGLE_CLOUD_TTS_API_KEY on Vercel (see .env.example)."
+          : "Pronunciation could not be generated."),
     };
   }
 

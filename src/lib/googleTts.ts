@@ -33,12 +33,13 @@ function getCloudKey(): string | undefined {
   return process.env.GOOGLE_CLOUD_TTS_API_KEY?.trim() || undefined;
 }
 
-/** On Vercel, Translate TTS often differs from local (e.g. "multi" → "multay"). Prefer Cloud when keyed. */
-function preferCloudOnServer(): boolean {
-  const cloudKey = getCloudKey();
-  if (!cloudKey) return false;
-  if (getTtsMode() === "cloud-first") return true;
+function isVercelProduction(): boolean {
   return process.env.VERCEL === "1";
+}
+
+/** Vercel Translate IP ≠ your home IP (e.g. "multi" → "multay"). Use Cloud TTS on Vercel. */
+function mustUseCloudOnServer(): boolean {
+  return isVercelProduction() && Boolean(getCloudKey());
 }
 
 function cloudFallbackEnabled(): boolean {
@@ -50,7 +51,7 @@ function cloudFallbackEnabled(): boolean {
 
 function getCloudVoice(): { languageCode: "en-US"; name: string } {
   const name =
-    process.env.GOOGLE_CLOUD_TTS_VOICE?.trim() || "en-US-Standard-D";
+    process.env.GOOGLE_CLOUD_TTS_VOICE?.trim() || "en-US-Wavenet-D";
   return { languageCode: "en-US", name };
 }
 
@@ -119,17 +120,25 @@ export async function synthesizeUsEnglishSpeech(text: string): Promise<Synthesiz
   if (!trimmed) throw new Error("Text is empty.");
 
   const cloudKey = getCloudKey();
-  const useCloudFirst = preferCloudOnServer();
+  const mode = getTtsMode();
   const allowCloudFallback = cloudFallbackEnabled();
+  const vercelCloudOnly = mustUseCloudOnServer();
 
-  if (useCloudFirst && cloudKey) {
+  if (isVercelProduction() && !cloudKey) {
+    throw new Error(
+      "GOOGLE_CLOUD_TTS_API_KEY is required on Vercel. Google Translate from the server sounds wrong (e.g. “multay” for “multi”).",
+    );
+  }
+
+  if ((vercelCloudOnly || mode === "cloud-first") && cloudKey) {
     try {
       return {
         buffer: await synthesizeViaCloudTts(trimmed, cloudKey),
         engine: "cloud",
         usedCloudFallback: false,
       };
-    } catch {
+    } catch (e) {
+      if (vercelCloudOnly) throw e;
       return {
         buffer: await synthesizeViaTranslateTts(trimmed),
         engine: "translate",

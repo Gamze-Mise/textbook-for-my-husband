@@ -5,6 +5,7 @@ export const TRANSLATE_TTS_HOST = "https://translate.google.com";
 export const TRANSLATE_TTS_CLIENTS = ["tw-ob", "gtx"] as const;
 export type TranslateTtsClient = (typeof TRANSLATE_TTS_CLIENTS)[number];
 
+/** Minimal query — extra params (total, idx, prev) often 404 from browser origins. */
 export function buildTranslateTtsUrl(
   text: string,
   client: TranslateTtsClient = "tw-ob",
@@ -14,11 +15,7 @@ export function buildTranslateTtsUrl(
     ie: "UTF-8",
     q,
     tl: TRANSLATE_TTS_LANG,
-    total: "1",
-    idx: "0",
-    textlen: String(q.length),
     client,
-    prev: "input",
     ttsspeed: "1",
   });
   return `${TRANSLATE_TTS_HOST}/translate_tts?${params.toString()}`;
