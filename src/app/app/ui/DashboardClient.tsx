@@ -10,6 +10,7 @@ import LogoMark from "@/components/LogoMark";
 import AlertBanner from "@/components/app/AlertBanner";
 import AppAccountMenu from "@/components/app/AppAccountMenu";
 import AppNavLink from "@/components/app/AppNavLink";
+import { requestAudioTts, type AudioTtsOk } from "@/lib/requestAudioTts";
 import {
   type DeckTab,
   type WordCard,
@@ -69,56 +70,14 @@ export default function DashboardClient() {
   const [deleting, setDeleting] = useState<WordCard | null>(null);
   const [deletingNow, setDeletingNow] = useState(false);
 
-  type TermTtsOk = {
-    ok: true;
-    audioPublicId: string;
-    audioSrc: string;
-    engine?: "translate" | "cloud";
-    usedCloudFallback?: boolean;
-  };
-  type TermTtsResult = TermTtsOk | { ok: false; error: string };
-
-  async function requestTermTts(term: string): Promise<TermTtsResult> {
-    const tts = await fetch("/api/audio/tts", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ term }),
-    });
-    const ttsJson = (await tts.json().catch(() => null)) as
-      | {
-          ok: true;
-          audioPublicId: string;
-          audioSrc: string;
-          engine?: "translate" | "cloud";
-          usedCloudFallback?: boolean;
-        }
-      | { error: string }
-      | null;
-
-    if (!tts.ok || !ttsJson || "error" in ttsJson) {
-      return {
-        ok: false,
-        error:
-          ttsJson && "error" in ttsJson
-            ? ttsJson.error
-            : "Pronunciation could not be generated.",
-      };
+  function ttsRegenNotice(tts: AudioTtsOk): string {
+    if (tts.source === "client") {
+      return "Pronunciation regenerated.";
     }
-
-    return {
-      ok: true,
-      audioPublicId: ttsJson.audioPublicId,
-      audioSrc: ttsJson.audioSrc,
-      engine: ttsJson.engine,
-      usedCloudFallback: ttsJson.usedCloudFallback,
-    };
-  }
-
-  function ttsRegenNotice(tts: TermTtsOk): string {
     if (tts.engine === "cloud") {
-      return "Pronunciation used Google Cloud TTS (often “multay” for “multi”). On Vercel: remove GOOGLE_CLOUD_TTS_API_KEY, keep GOOGLE_CLOUD_TTS_MODE off cloud-first, redeploy, then regenerate again.";
+      return "Pronunciation regenerated (Cloud TTS).";
     }
-    return "Pronunciation regenerated.";
+    return "Pronunciation regenerated (server). For best quality, allow browser access to Google Translate.";
   }
 
   async function regenerateEditPronunciation() {
@@ -133,7 +92,7 @@ export default function DashboardClient() {
     setError(null);
     setNotice(null);
 
-    const tts = await requestTermTts(termTrim);
+    const tts = await requestAudioTts({ term: termTrim });
     if (!tts.ok) {
       setRegeneratingTermAudio(false);
       setError(tts.error);
@@ -192,7 +151,6 @@ export default function DashboardClient() {
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
@@ -283,16 +241,8 @@ export default function DashboardClient() {
     const ex = exampleText.trim();
     if (!ex) return { ok: true as const };
 
-    const tts = await fetch("/api/audio/tts", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text: ex }),
-    });
-    const ttsJson = (await tts.json().catch(() => null)) as
-      | { ok: true; audioPublicId: string; audioSrc: string }
-      | { error: string }
-      | null;
-    if (!tts.ok || !ttsJson || "error" in ttsJson) {
+    const tts = await requestAudioTts({ text: ex });
+    if (!tts.ok) {
       return {
         ok: false as const,
         error: "Example audio could not be generated.",
@@ -303,7 +253,7 @@ export default function DashboardClient() {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        exampleAudioPublicId: ttsJson.audioPublicId,
+        exampleAudioPublicId: tts.audioPublicId,
       }),
     });
     const patchJson = (await patch.json().catch(() => null)) as
@@ -343,7 +293,7 @@ export default function DashboardClient() {
     let audioFailed = false;
 
     if (term.trim()) {
-      const tts = await requestTermTts(term.trim());
+      const tts = await requestAudioTts({ term: term.trim() });
       if (!tts.ok) {
         audioFailed = true;
       } else {
@@ -408,7 +358,7 @@ export default function DashboardClient() {
     // If audio generation failed, we still save the word, then try once more.
     if (audioFailed && term.trim()) {
       try {
-        const tts = await requestTermTts(term.trim());
+        const tts = await requestAudioTts({ term: term.trim() });
 
         if (tts.ok) {
           await fetch(`/api/words/${json.word.id}`, {
@@ -477,7 +427,7 @@ export default function DashboardClient() {
     let audioPublicId: string | null | undefined = editing.audioPublicId;
 
     if (termTrim !== editing.term) {
-      const tts = await requestTermTts(termTrim);
+      const tts = await requestAudioTts({ term: termTrim });
       if (tts.ok) {
         audioPublicId = tts.audioPublicId;
         if (tts.usedCloudFallback || tts.engine === "cloud") {

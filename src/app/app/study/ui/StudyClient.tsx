@@ -7,6 +7,7 @@ import AppAccountMenu from "@/components/app/AppAccountMenu";
 import AlertBanner from "@/components/app/AlertBanner";
 import WordImage from "@/components/WordImage";
 import { tabPillActive, tabPillIdle } from "@/components/ui/buttonClasses";
+import { requestAudioTts } from "@/lib/requestAudioTts";
 import { type DeckTab, type WordCard, STUDY_DECK_TABS, deckTabLabel } from "@/types/word";
 
 /** Rotating block: one physical “card” slab (both faces + actions). */
@@ -164,17 +165,10 @@ export default function StudyClient() {
     const ac = new AbortController();
     void (async () => {
       try {
-        const res = await fetch("/api/audio/tts", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ text: current.example }),
-          signal: ac.signal,
+        const json = await requestAudioTts({
+          text: current.example!.trim(),
         });
-        const json = (await res.json().catch(() => null)) as
-          | { ok: true; audioPublicId: string; audioSrc: string }
-          | { error: string }
-          | null;
-        if (!res.ok || !json || !("ok" in json && json.ok)) return;
+        if (!json.ok) return;
 
         setExampleSrcOverride((prev) => ({
           ...prev,

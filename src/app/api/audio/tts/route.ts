@@ -2,16 +2,21 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { cloudinary } from "@/lib/cloudinary";
-import { cloudinaryVideoDeliveryUrl } from "@/lib/cloudinaryDelivery";
 import { synthesizeUsEnglishSpeech, type TtsEngine } from "@/lib/googleTts";
+import { isValidMp3Buffer } from "@/lib/translateTtsUrl";
+import { uploadAudioBuffer } from "@/lib/uploadAudioBuffer";
 
-const bodySchema = z.object({
-  term: z.string().min(1).max(64).optional(),
-  text: z.string().min(1).max(600).optional(),
-}).refine((v) => Boolean(v.term?.trim() || v.text?.trim()), {
-  message: "Either term or text is required.",
-});
+const MAX_CLIENT_AUDIO_BYTES = 512 * 1024;
+
+const bodySchema = z
+  .object({
+    term: z.string().min(1).max(64).optional(),
+    text: z.string().min(1).max(600).optional(),
+    audioBase64: z.string().min(64).max(700_000).optional(),
+  })
+  .refine((v) => Boolean(v.term?.trim() || v.text?.trim()), {
+    message: "Either term or text is required.",
+  });
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -32,39 +37,56 @@ export async function POST(req: Request) {
   let buffer: Buffer;
   let engine: TtsEngine = "translate";
   let usedCloudFallback = false;
-  try {
-    ({ buffer, engine, usedCloudFallback } = await synthesizeUsEnglishSpeech(raw));
-  } catch {
-    return NextResponse.json({ error: "TTS request failed." }, { status: 502 });
+  let source: "client" | "server" = "server";
+
+  const clientB64 = parsed.data.audioBase64?.trim();
+  if (clientB64) {
+    try {
+      const clientBuf = Buffer.from(clientB64, "base64");
+      if (
+        clientBuf.length <= MAX_CLIENT_AUDIO_BYTES &&
+        isValidMp3Buffer(clientBuf)
+      ) {
+        buffer = clientBuf;
+        engine = "translate";
+        source = "client";
+      } else {
+        return NextResponse.json(
+          { error: "Invalid client audio." },
+          { status: 400 },
+        );
+      }
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid client audio." },
+        { status: 400 },
+      );
+    }
+  } else {
+    try {
+      ({ buffer, engine, usedCloudFallback } =
+        await synthesizeUsEnglishSpeech(raw));
+    } catch {
+      return NextResponse.json({ error: "TTS request failed." }, { status: 502 });
+    }
   }
 
   const safe = raw.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40);
   const publicId = `${safe}-${Date.now()}`;
 
   try {
-    const uploaded = await new Promise<{ secure_url: string; public_id: string }>(
-      (resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-          {
-            resource_type: "video",
-            folder,
-            public_id: publicId,
-            overwrite: true,
-          },
-          (error, result) => {
-            if (error || !result) return reject(error);
-            resolve({ secure_url: result.secure_url, public_id: result.public_id });
-          },
-        );
-        stream.end(buffer);
-      },
-    );
+    const uploaded = await uploadAudioBuffer({
+      buffer,
+      folder,
+      publicId,
+    });
 
     return NextResponse.json({
       ok: true,
-      audioPublicId: uploaded.public_id,
-      audioSrc: cloudinaryVideoDeliveryUrl(uploaded.public_id),
+      audioPublicId: uploaded.audioPublicId,
+      audioSrc: uploaded.audioSrc,
       engine,
+      source,
       usedCloudFallback,
     });
   } catch (e) {

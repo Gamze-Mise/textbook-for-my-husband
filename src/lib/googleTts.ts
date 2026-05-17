@@ -1,8 +1,9 @@
-import googleTTS from "google-tts-api";
-
-/** Google Translate TTS — `tl=en` on translate.google.com (not `en_us`). */
-const TRANSLATE_TTS_LANG = "en";
-const TRANSLATE_TTS_HOST = "https://translate.google.com";
+import {
+  TRANSLATE_TTS_CLIENTS,
+  TRANSLATE_TTS_HOST,
+  buildTranslateTtsUrl,
+  isValidMp3Buffer,
+} from "@/lib/translateTtsUrl";
 
 const TRANSLATE_FETCH_HEADERS = {
   Referer: `${TRANSLATE_TTS_HOST}/`,
@@ -11,9 +12,6 @@ const TRANSLATE_FETCH_HEADERS = {
   Accept: "audio/mpeg,*/*;q=0.9",
   "Accept-Language": "en-US,en;q=0.9",
 } as const;
-
-/** tw-ob first; gtx as a second attempt when Translate blocks datacenter IPs. */
-const TRANSLATE_TTS_CLIENTS = ["tw-ob", "gtx"] as const;
 
 export type TtsEngine = "translate" | "cloud";
 
@@ -47,33 +45,13 @@ function getCloudVoice(): { languageCode: "en-US"; name: string } {
   return { languageCode: "en-US", name };
 }
 
-function isMp3Buffer(buf: Buffer): boolean {
-  if (buf.length < 4) return false;
-  if (buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) return true; // ID3
-  return buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0; // MPEG sync
-}
-
-function buildTranslateTtsUrl(
-  text: string,
-  client: (typeof TRANSLATE_TTS_CLIENTS)[number],
-): string {
-  const base = googleTTS.getAudioUrl(text, {
-    lang: TRANSLATE_TTS_LANG,
-    slow: false,
-    host: TRANSLATE_TTS_HOST,
-  });
-  const url = new URL(base);
-  url.searchParams.set("client", client);
-  return url.toString();
-}
-
 async function fetchTranslateTtsUrl(url: string): Promise<Buffer> {
   const res = await fetch(url, { headers: TRANSLATE_FETCH_HEADERS });
   if (!res.ok) {
     throw new Error(`Translate TTS failed (${res.status}).`);
   }
   const buf = Buffer.from(await res.arrayBuffer());
-  if (!isMp3Buffer(buf) || buf.length < 512) {
+  if (!isValidMp3Buffer(buf)) {
     throw new Error("Translate TTS returned invalid audio.");
   }
   return buf;
