@@ -3,6 +3,10 @@ import { z } from "zod";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { synthesizeUsEnglishSpeech } from "@/lib/googleTts";
+import {
+  cloudinaryExampleAudioFolder,
+  cloudinaryWordAudioFolder,
+} from "@/lib/cloudinaryAsset";
 import { uploadAudioBuffer } from "@/lib/uploadAudioBuffer";
 
 const bodySchema = z
@@ -28,8 +32,8 @@ export async function POST(req: Request) {
   const raw = (parsed.data.text ?? parsed.data.term ?? "").trim();
   const userId = session.user.id;
   const folder = parsed.data.text?.trim()
-    ? `textbook/example/${userId}`
-    : `textbook/word/${userId}`;
+    ? cloudinaryExampleAudioFolder(userId)
+    : cloudinaryWordAudioFolder(userId);
 
   let buffer: Buffer;
   try {

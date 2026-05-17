@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "npm run lint && npm run build",
+    "test": "npm run lint && npm run test:unit && npm run build",
+    "test:unit": "tsx --test src/lib/cloudinaryAsset.test.ts src/lib/cloudinaryDeleteQueue.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "postinstall": "prisma generate",
@@ -38,6 +39,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
+    "tsx": "^4.22.1",
     "typescript": "^5"
   }
 }

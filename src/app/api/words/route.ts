@@ -3,6 +3,12 @@ import { z } from "zod";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import {
+  cloudinaryExampleAudioFolder,
+  cloudinaryWordAudioFolder,
+  cloudinaryWordImageFolder,
+  normalizeStoredPublicId,
+} from "@/lib/cloudinaryAsset";
 import { wordToClient } from "@/lib/wordSerialize";
 
 const createSchema = z.object({
@@ -116,6 +122,10 @@ export async function POST(req: Request) {
   const meaning = parsed.data.meaning.trim();
   const example = parsed.data.example?.trim() || null;
 
+  const wordAudioFolder = cloudinaryWordAudioFolder(uid);
+  const exampleAudioFolder = cloudinaryExampleAudioFolder(uid);
+  const imageFolder = cloudinaryWordImageFolder(uid);
+
   try {
     const word = await prisma.word.create({
       data: {
@@ -124,9 +134,18 @@ export async function POST(req: Request) {
         meaning,
         example,
         bucket: parsed.data.bucket ?? "FORGOTTEN",
-        audioPublicId: parsed.data.audioPublicId,
-        exampleAudioPublicId: parsed.data.exampleAudioPublicId,
-        imagePublicId: parsed.data.imagePublicId,
+        audioPublicId: normalizeStoredPublicId(
+          parsed.data.audioPublicId,
+          wordAudioFolder,
+        ),
+        exampleAudioPublicId: normalizeStoredPublicId(
+          parsed.data.exampleAudioPublicId,
+          exampleAudioFolder,
+        ),
+        imagePublicId: normalizeStoredPublicId(
+          parsed.data.imagePublicId,
+          imageFolder,
+        ),
         imageFocusX: parsed.data.imagePublicId
           ? (parsed.data.imageFocusX ?? null)
           : null,

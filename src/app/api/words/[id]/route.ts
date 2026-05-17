@@ -4,6 +4,18 @@ import { z } from "zod";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import {
+  cloudinaryExampleAudioFolder,
+  cloudinaryWordAudioFolder,
+  cloudinaryWordImageFolder,
+  normalizeStoredPublicId,
+} from "@/lib/cloudinaryAsset";
+import {
+  deleteCloudinaryAsset,
+  deleteWordCloudinaryAssets,
+  queueCloudinaryAssetReplace,
+  type CloudinaryAssetDeleteJob,
+} from "@/lib/deleteCloudinaryAsset";
 import { wordToClient } from "@/lib/wordSerialize";
 
 function sameNullableString(
@@ -48,9 +60,14 @@ export async function PATCH(
   });
   if (!word) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  const wordAudioFolder = cloudinaryWordAudioFolder(word.userId);
+  const exampleAudioFolder = cloudinaryExampleAudioFolder(word.userId);
+  const imageFolder = cloudinaryWordImageFolder(word.userId);
+
   try {
     const p = parsed.data;
     const data: Prisma.WordUncheckedUpdateInput = {};
+    const cloudinaryDeletes: CloudinaryAssetDeleteJob[] = [];
 
     if (p.bucket !== undefined && p.bucket !== word.bucket) {
       data.bucket = p.bucket;
@@ -68,18 +85,39 @@ export async function PATCH(
       if (next !== word.example) data.example = next;
     }
     if (p.audioPublicId !== undefined) {
-      if (!sameNullableString(p.audioPublicId, word.audioPublicId)) {
-        data.audioPublicId = p.audioPublicId;
+      const next = normalizeStoredPublicId(p.audioPublicId, wordAudioFolder);
+      queueCloudinaryAssetReplace(cloudinaryDeletes, {
+        previous: word.audioPublicId,
+        next,
+        folder: wordAudioFolder,
+        resourceType: "video",
+      });
+      if (!sameNullableString(next, word.audioPublicId)) {
+        data.audioPublicId = next;
       }
     }
     if (p.exampleAudioPublicId !== undefined) {
-      if (!sameNullableString(p.exampleAudioPublicId, word.exampleAudioPublicId)) {
-        data.exampleAudioPublicId = p.exampleAudioPublicId;
+      const next = normalizeStoredPublicId(p.exampleAudioPublicId, exampleAudioFolder);
+      queueCloudinaryAssetReplace(cloudinaryDeletes, {
+        previous: word.exampleAudioPublicId,
+        next,
+        folder: exampleAudioFolder,
+        resourceType: "video",
+      });
+      if (!sameNullableString(next, word.exampleAudioPublicId)) {
+        data.exampleAudioPublicId = next;
       }
     }
     if (p.imagePublicId !== undefined) {
-      if (!sameNullableString(p.imagePublicId, word.imagePublicId)) {
-        data.imagePublicId = p.imagePublicId;
+      const next = normalizeStoredPublicId(p.imagePublicId, imageFolder);
+      queueCloudinaryAssetReplace(cloudinaryDeletes, {
+        previous: word.imagePublicId,
+        next,
+        folder: imageFolder,
+        resourceType: "image",
+      });
+      if (!sameNullableString(next, word.imagePublicId)) {
+        data.imagePublicId = next;
         if (p.imagePublicId === null) {
           data.imageFocusX = null;
           data.imageFocusY = null;
@@ -99,6 +137,12 @@ export async function PATCH(
       Object.keys(data).length > 0
         ? await prisma.word.update({ where: { id: wordId }, data })
         : word;
+
+    if (cloudinaryDeletes.length > 0) {
+      await Promise.allSettled(
+        cloudinaryDeletes.map((job) => deleteCloudinaryAsset(job)),
+      );
+    }
 
     return NextResponse.json({ ok: true, word: wordToClient(updated) });
   } catch (e) {
@@ -140,6 +184,7 @@ export async function DELETE(
   if (!word) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   await prisma.word.delete({ where: { id: wordId } });
+  await deleteWordCloudinaryAssets(word);
   return NextResponse.json({ ok: true });
 }
 

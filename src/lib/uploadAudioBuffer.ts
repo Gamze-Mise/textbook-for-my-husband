@@ -1,3 +1,7 @@
+import {
+  cloudinaryDeliveryPublicId,
+  cloudinaryStoragePublicId,
+} from "@/lib/cloudinaryAsset";
 import { cloudinary } from "@/lib/cloudinary";
 import { cloudinaryVideoDeliveryUrl } from "@/lib/cloudinaryDelivery";
 
@@ -22,13 +26,19 @@ export async function uploadAudioBuffer(args: {
     stream.end(args.buffer);
   });
 
-  const audioSrc = cloudinaryVideoDeliveryUrl(uploaded.public_id);
+  const audioPublicId = cloudinaryStoragePublicId(
+    uploaded.public_id,
+    args.folder,
+  );
+  const audioSrc = cloudinaryVideoDeliveryUrl(
+    cloudinaryDeliveryPublicId(audioPublicId, args.folder),
+  );
   if (!audioSrc) {
     throw new Error("Cloudinary delivery URL could not be built.");
   }
 
   return {
-    audioPublicId: uploaded.public_id,
+    audioPublicId,
     audioSrc,
   };
 }

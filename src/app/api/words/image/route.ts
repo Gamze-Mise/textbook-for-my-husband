@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import {
+  cloudinaryDeliveryPublicId,
+  cloudinaryStoragePublicId,
+  cloudinaryWordImageFolder,
+} from "@/lib/cloudinaryAsset";
 import { cloudinary } from "@/lib/cloudinary";
 import { cloudinaryImageDeliveryUrl } from "@/lib/cloudinaryDelivery";
 
 const MAX_BYTES = 2 * 1024 * 1024; // 2 MB
 const ALLOWED = new Set(["image/jpeg", "image/png", "image/webp"]);
-
-const IMAGE_FOLDER = "textbook/word-images";
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -15,10 +18,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const uid = Number(session.user.id);
-  if (!Number.isFinite(uid)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = session.user.id;
+  const folder = cloudinaryWordImageFolder(userId);
 
   let form: FormData;
   try {
@@ -53,14 +54,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Could not read file." }, { status: 400 });
   }
 
-  const safeBase = `u${uid}-${Date.now()}`;
+  const safeBase = `img-${Date.now()}`;
 
   try {
     const uploaded = await new Promise<{ public_id: string }>((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
         {
           resource_type: "image",
-          folder: IMAGE_FOLDER,
+          folder,
           public_id: safeBase,
           overwrite: true,
         },
@@ -72,7 +73,13 @@ export async function POST(req: Request) {
       stream.end(buffer);
     });
 
-    const imageSrc = cloudinaryImageDeliveryUrl(uploaded.public_id);
+    const imagePublicId = cloudinaryStoragePublicId(
+      uploaded.public_id,
+      folder,
+    );
+    const imageSrc = cloudinaryImageDeliveryUrl(
+      cloudinaryDeliveryPublicId(imagePublicId, folder),
+    );
     if (!imageSrc) {
       return NextResponse.json(
         { error: "Could not build image delivery URL." },
@@ -82,7 +89,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ok: true as const,
-      imagePublicId: uploaded.public_id,
+      imagePublicId,
       imageSrc,
     });
   } catch (e) {
