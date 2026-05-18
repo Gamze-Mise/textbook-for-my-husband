@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import { newToken, sha256Hex } from "@/lib/tokens";
+import { AUTH_LINK_EXPIRY_MS } from "@/lib/linkExpiry";
 import { sendVerificationEmail } from "@/lib/mail";
 
 const bodySchema = z.object({
@@ -41,12 +42,12 @@ export async function POST(req: Request) {
         email: normalizedEmail,
         passwordHash,
         tokenHash,
-        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+        expiresAt: new Date(Date.now() + AUTH_LINK_EXPIRY_MS),
       },
       update: {
         passwordHash,
         tokenHash,
-        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+        expiresAt: new Date(Date.now() + AUTH_LINK_EXPIRY_MS),
       },
     });
 

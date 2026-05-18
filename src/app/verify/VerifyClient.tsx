@@ -4,17 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import ThemeToggle from "@/components/ThemeToggle";
 
-export default function VerifyClient() {
-  const [email] = useState(() => {
-    if (typeof window === "undefined") return "";
-    const sp = new URLSearchParams(window.location.search);
-    return sp.get("email") ?? "";
-  });
-  const [token] = useState(() => {
-    if (typeof window === "undefined") return "";
-    const sp = new URLSearchParams(window.location.search);
-    return sp.get("token") ?? "";
-  });
+type VerifyClientProps = {
+  email: string;
+  token: string;
+};
+
+export default function VerifyClient({ email, token }: VerifyClientProps) {
 
   const [state, setState] = useState<
     "idle" | "verifying" | "success" | "error"

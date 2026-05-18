@@ -73,7 +73,8 @@ Audio and image uploads require valid Cloudinary credentials. Email flows requir
 | `npm run build`          | Production build                              |
 | `npm run start`          | Run production build locally                  |
 | `npm run lint`           | ESLint                                        |
-| `npm test`               | Lint + production build                       |
+| `npm test`               | Lint + unit tests + production build          |
+| `npm run test:unit`      | Unit tests only                               |
 | `npm run prisma:migrate` | Apply migrations (dev)                        |
 | `npm run vercel-build`   | Migrate, generate client, build (CI / Vercel) |
 
@@ -96,7 +97,8 @@ src/
   app/                 # Routes (landing, auth, /app library · study · quiz)
   app/api/             # REST API (words, quiz, TTS, auth)
   components/          # UI (word cards, marketing, shared)
-  lib/                 # Auth, Prisma, Cloudinary, mail
+  lib/                 # Prisma, Cloudinary, mail, email templates
+  lib/email/           # HTML templates for verification & reset
 prisma/
   schema.prisma        # User & Word models
 ```

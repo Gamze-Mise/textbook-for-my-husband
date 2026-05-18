@@ -1,11 +1,12 @@
-import { Suspense } from "react";
 import LoginClient from "@/app/login/LoginClient";
+import { safeCallbackUrl } from "@/lib/safeCallbackUrl";
 
-export default function LoginPage() {
-  return (
-    <Suspense>
-      <LoginClient />
-    </Suspense>
-  );
+type PageProps = {
+  searchParams: Promise<{ callbackUrl?: string }>;
+};
+
+export default async function LoginPage({ searchParams }: PageProps) {
+  const sp = await searchParams;
+
+  return <LoginClient callbackUrl={safeCallbackUrl(sp.callbackUrl)} />;
 }
-

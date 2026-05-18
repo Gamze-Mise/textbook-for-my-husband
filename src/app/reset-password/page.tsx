@@ -1,11 +1,13 @@
-import { Suspense } from "react";
 import ResetPasswordClient from "@/app/reset-password/ResetPasswordClient";
 
-export default function ResetPasswordPage() {
+type PageProps = {
+  searchParams: Promise<{ email?: string; token?: string }>;
+};
+
+export default async function ResetPasswordPage({ searchParams }: PageProps) {
+  const sp = await searchParams;
+
   return (
-    <Suspense>
-      <ResetPasswordClient />
-    </Suspense>
+    <ResetPasswordClient email={sp.email ?? ""} token={sp.token ?? ""} />
   );
 }
-

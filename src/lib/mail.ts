@@ -1,10 +1,13 @@
 import nodemailer from "nodemailer";
+import type { Transporter } from "nodemailer";
+import { APP_NAME } from "@/lib/email/constants";
+import {
+  buildPasswordResetEmail,
+  buildVerificationEmail,
+} from "@/lib/email/templates";
 import { env } from "@/lib/env";
 
-export async function sendVerificationEmail(args: {
-  to: string;
-  verifyUrl: string;
-}) {
+function assertSmtpConfigured(): void {
   if (
     !env.SMTP_HOST ||
     !env.SMTP_PORT ||
@@ -16,26 +19,67 @@ export async function sendVerificationEmail(args: {
       "Email service is not configured. Set SMTP_* environment variables.",
     );
   }
+}
 
-  const transporter = nodemailer.createTransport({
-    host: env.SMTP_HOST,
-    port: env.SMTP_PORT,
-    secure: env.SMTP_SECURE,
-    auth: {
-      user: env.SMTP_USER,
-      pass: env.SMTP_PASS,
-    },
-  });
+let transporter: Transporter | null = null;
 
-  await transporter.sendMail({
-    from: env.SMTP_USER,
+function getTransporter(): Transporter {
+  assertSmtpConfigured();
+  if (!transporter) {
+    transporter = nodemailer.createTransport({
+      host: env.SMTP_HOST,
+      port: env.SMTP_PORT,
+      secure: env.SMTP_SECURE,
+      auth: {
+        user: env.SMTP_USER,
+        pass: env.SMTP_PASS,
+      },
+    });
+  }
+  return transporter;
+}
+
+function mailFrom(): string {
+  return `"${APP_NAME}" <${env.SMTP_USER}>`;
+}
+
+async function sendTransactionalEmail(args: {
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+}): Promise<void> {
+  await getTransporter().sendMail({
+    from: mailFrom(),
     to: args.to,
-    subject: "Vocabulary: verify your email",
-    text: `Finish creating your account: ${args.verifyUrl}`,
-    html: `
-      <p>Finish creating your account:</p>
-      <p><a href="${args.verifyUrl}">${args.verifyUrl}</a></p>
-    `,
+    subject: args.subject,
+    text: args.text,
+    html: args.html,
   });
 }
 
+export async function sendVerificationEmail(args: {
+  to: string;
+  verifyUrl: string;
+}): Promise<void> {
+  const { html, text, subject } = buildVerificationEmail(args.verifyUrl);
+  await sendTransactionalEmail({
+    to: args.to,
+    subject,
+    text,
+    html,
+  });
+}
+
+export async function sendPasswordResetEmail(args: {
+  to: string;
+  resetUrl: string;
+}): Promise<void> {
+  const { html, text, subject } = buildPasswordResetEmail(args.resetUrl);
+  await sendTransactionalEmail({
+    to: args.to,
+    subject,
+    text,
+    html,
+  });
+}
