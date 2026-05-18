@@ -9,6 +9,7 @@ import {
   cloudinaryWordImageFolder,
   normalizeStoredPublicId,
 } from "@/lib/cloudinaryAsset";
+import { orderMixedDeck } from "@/lib/mixedDeckOrder";
 import { wordToClient } from "@/lib/wordSerialize";
 
 const createSchema = z.object({
@@ -22,35 +23,6 @@ const createSchema = z.object({
   imageFocusX: z.number().int().min(0).max(100).optional(),
   imageFocusY: z.number().int().min(0).max(100).optional(),
 });
-
-function pickMixed<T>(args: { forgotten: T[]; toStudy: T[]; known: T[] }) {
-  const shuffle = <U>(arr: U[]) => [...arr].sort(() => Math.random() - 0.5);
-
-  const forgotten = shuffle(args.forgotten);
-  const toStudy = shuffle(args.toStudy);
-  const known = shuffle(args.known);
-
-  const out: T[] = [];
-  // Heavily favor "unknown-ish" buckets in mixed
-  const plan = [
-    ...Array.from({ length: 8 }, () => "FORGOTTEN"),
-    ...Array.from({ length: 3 }, () => "TO_STUDY"),
-    ...Array.from({ length: 1 }, () => "KNOWN"),
-  ] as const;
-
-  while (
-    out.length < 50 &&
-    (forgotten.length || toStudy.length || known.length)
-  ) {
-    for (const p of plan) {
-      if (out.length >= 50) break;
-      if (p === "FORGOTTEN" && forgotten.length) out.push(forgotten.shift()!);
-      else if (p === "TO_STUDY" && toStudy.length) out.push(toStudy.shift()!);
-      else if (p === "KNOWN" && known.length) out.push(known.shift()!);
-    }
-  }
-  return out;
-}
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -78,7 +50,7 @@ export async function GET(req: Request) {
     const toStudy = words.filter((w) => w.bucket === "TO_STUDY");
     const known = words.filter((w) => w.bucket === "KNOWN");
 
-    const mixed = pickMixed({ forgotten, toStudy, known });
+    const mixed = orderMixedDeck({ forgotten, toStudy, known });
     return NextResponse.json({
       ok: true,
       words: mixed.map(wordToClient),

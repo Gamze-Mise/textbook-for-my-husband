@@ -295,6 +295,28 @@ export default function DashboardClient() {
     });
   }, [words, query]);
 
+  async function markWord(word: WordCard, nextBucket: "KNOWN" | "FORGOTTEN") {
+    setError(null);
+    const res = await fetch(`/api/words/${word.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ bucket: nextBucket }),
+    });
+
+    if (!res.ok) {
+      setError("Could not update card status. Check your connection.");
+      return;
+    }
+
+    if (active !== "MIXED" && nextBucket !== active) {
+      setWords((prev) => prev.filter((w) => w.id !== word.id));
+    } else {
+      setWords((prev) =>
+        prev.map((w) => (w.id === word.id ? { ...w, bucket: nextBucket } : w)),
+      );
+    }
+  }
+
   async function createWord() {
     setSaving(true);
     setError(null);
@@ -649,6 +671,7 @@ export default function DashboardClient() {
                 onRegenerate={regenerateCardAudio}
                 onEdit={openEdit}
                 onDelete={(word) => setDeleting(word)}
+                onMark={markWord}
               />
             </div>
           ))
@@ -947,6 +970,7 @@ function LibraryCard({
   onRegenerate,
   onEdit,
   onDelete,
+  onMark,
 }: {
   word: WordCard;
   isLocalDev: boolean;
@@ -954,6 +978,7 @@ function LibraryCard({
   onRegenerate: (w: WordCard) => void;
   onEdit: (w: WordCard) => void;
   onDelete: (w: WordCard) => void;
+  onMark: (w: WordCard, bucket: "KNOWN" | "FORGOTTEN") => void;
 }) {
   const termSize = textSizeForLength({
     len: word.term.length,
@@ -1111,6 +1136,29 @@ function LibraryCard({
           <div className="h-10" aria-hidden />
         )}
       </div>
+
+      <div className="mt-3 flex gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800/80">
+        <button
+          type="button"
+          className="flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium transition active:scale-[0.98] dark:border-zinc-800 dark:bg-zinc-950"
+          onClick={(e) => {
+            e.stopPropagation();
+            void onMark(word, "KNOWN");
+          }}
+        >
+          Got it
+        </button>
+        <button
+          type="button"
+          className="flex-1 rounded-xl bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition active:scale-[0.98] dark:bg-zinc-100 dark:text-zinc-950"
+          onClick={(e) => {
+            e.stopPropagation();
+            void onMark(word, "FORGOTTEN");
+          }}
+        >
+          Again
+        </button>
+      </div>
     </div>
   );
-  }
+}
