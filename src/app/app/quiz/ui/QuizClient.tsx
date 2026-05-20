@@ -233,12 +233,13 @@ export default function QuizClient() {
                 Word
               </p>
             </div>
-            <div className="relative min-h-36 max-h-[26vh] shrink-0 overflow-hidden bg-zinc-100 dark:bg-zinc-900 lg:max-h-none lg:min-h-0 lg:flex-1 lg:shrink">
+            <div className="relative min-h-36 max-h-[26vh] shrink-0 overflow-hidden bg-white dark:bg-zinc-950 lg:max-h-none lg:min-h-0 lg:flex-1 lg:shrink">
               <WordImage
                 src={current.imageSrc}
                 alt=""
-                objectPosition={current.imageObjectPosition}
-                className="absolute inset-0 size-full object-cover"
+                placeholder="blur"
+                loading="lazy"
+                className="absolute inset-0 size-full object-contain object-center"
               />
             </div>
           </article>

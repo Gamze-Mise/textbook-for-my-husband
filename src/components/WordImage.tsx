@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Props = {
   src: string | null | undefined;
@@ -8,7 +8,24 @@ type Props = {
   className?: string;
   /** CSS `object-position` when using `object-cover` (e.g. `"50% 15%"`). */
   objectPosition?: string | null;
+  /** Low-quality blurred placeholder first, then full image. */
+  placeholder?: "blur";
+  loading?: "eager" | "lazy";
+  decoding?: "async" | "sync" | "auto";
+  fetchPriority?: "high" | "low" | "auto";
 };
+
+function cloudinaryBlurPlaceholderUrl(src: string): string | null {
+  if (!src.includes("res.cloudinary.com")) return null;
+  const marker = "/upload/";
+  const i = src.indexOf(marker);
+  if (i < 0) return null;
+  const head = src.slice(0, i + marker.length);
+  const tail = src.slice(i + marker.length);
+  if (!tail) return null;
+  const transform = "f_auto,q_1,e_blur:200,w_80";
+  return `${head}${transform}/${tail}`;
+}
 
 function PlaceholderGraphic({ className }: { className?: string }) {
   return (
@@ -64,26 +81,77 @@ function PlaceholderGraphic({ className }: { className?: string }) {
  * Word illustration: missing URL or load error → inline placeholder (theme-aware).
  * Remote URLs use a plain img (Cloudinary and blob previews); Next/Image is not used here.
  */
-export default function WordImage({ src, alt, className, objectPosition }: Props) {
-  const trimmed = (src ?? "").trim();
+export default function WordImage({
+  src,
+  alt,
+  className,
+  objectPosition,
+  placeholder,
+  loading,
+  decoding = "async",
+  fetchPriority,
+}: Props) {
+  const desiredSrc = (src ?? "").trim();
   const [failedForUrl, setFailedForUrl] = useState<string | null>(null);
-  const loadFailed = Boolean(trimmed && failedForUrl === trimmed);
 
-  if (!trimmed || loadFailed) {
+  const effectiveSrc = desiredSrc;
+  const blurCandidate = useMemo(() => {
+    if (placeholder !== "blur") return null;
+    if (!effectiveSrc || effectiveSrc.startsWith("blob:")) return null;
+    return cloudinaryBlurPlaceholderUrl(effectiveSrc);
+  }, [effectiveSrc, placeholder]);
+
+  const [fullReadyFor, setFullReadyFor] = useState<string | null>(null);
+  const fullReady = fullReadyFor === effectiveSrc;
+
+  useEffect(() => {
+    if (placeholder !== "blur") return;
+    if (!effectiveSrc || effectiveSrc.startsWith("blob:")) return;
+    if (fullReadyFor === effectiveSrc) return;
+
+    let cancelled = false;
+    const img = new Image();
+    img.decoding = "async";
+    img.onload = () => {
+      if (cancelled) return;
+      setFullReadyFor(effectiveSrc);
+    };
+    img.onerror = () => {
+      if (cancelled) return;
+      setFullReadyFor(effectiveSrc);
+    };
+    img.src = effectiveSrc;
+    return () => {
+      cancelled = true;
+      img.onload = null;
+      img.onerror = null;
+    };
+  }, [effectiveSrc, fullReadyFor, placeholder]);
+
+  const renderSrc =
+    placeholder === "blur" && blurCandidate && !fullReady ? blurCandidate : effectiveSrc;
+  const loadFailed = Boolean(effectiveSrc && failedForUrl === effectiveSrc);
+  const style = useMemo(
+    () => (objectPosition ? { objectPosition } : undefined),
+    [objectPosition],
+  );
+
+  if (!renderSrc || loadFailed) {
     return <PlaceholderGraphic className={className} />;
   }
 
   return (
     // eslint-disable-next-line @next/next/no-img-element -- Cloudinary + blob previews
     <img
-      src={trimmed}
+      src={renderSrc}
       alt={alt}
       className={className}
-      style={objectPosition ? { objectPosition } : undefined}
-      loading={trimmed.startsWith("blob:") ? "eager" : "lazy"}
-      decoding="async"
+      style={style}
+      loading={loading ?? (renderSrc.startsWith("blob:") ? "eager" : "lazy")}
+      decoding={decoding}
+      fetchPriority={fetchPriority}
       draggable={false}
-      onError={() => setFailedForUrl(trimmed)}
+      onError={() => setFailedForUrl(effectiveSrc)}
     />
   );
 }

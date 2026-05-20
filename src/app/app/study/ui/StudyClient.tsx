@@ -26,7 +26,9 @@ export default function StudyClient() {
   const studyRootRef = useRef<HTMLDivElement | null>(null);
   const [bucket, setBucket] = useState<DeckTab>("MIXED");
   const [words, setWords] = useState<WordCard[]>([]);
+  // idx: navigation target; shownIdx: what's actually rendered (text+image together)
   const [idx, setIdx] = useState(0);
+  const [shownIdx, setShownIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,10 +37,10 @@ export default function StudyClient() {
     {},
   );
 
-  const current = words[idx] ?? null;
+  const current = words[shownIdx] ?? null;
   const remaining = useMemo(
-    () => (words.length ? `${idx + 1}/${words.length}` : "0/0"),
-    [idx, words.length],
+    () => (words.length ? `${shownIdx + 1}/${words.length}` : "0/0"),
+    [shownIdx, words.length],
   );
 
   async function load() {
@@ -46,6 +48,7 @@ export default function StudyClient() {
     setError(null);
     setFlipped(false);
     setIdx(0);
+    setShownIdx(0);
     setExampleSrcOverride({});
 
     const res = await fetch(`/api/words?bucket=${bucket}`);
@@ -64,6 +67,44 @@ export default function StudyClient() {
 
     setWords(json.words);
   }
+
+  useEffect(() => {
+    // Swap the whole card (text+image) only after the target image is ready.
+    if (!words.length) {
+      const t = window.setTimeout(() => setShownIdx(0), 0);
+      return () => window.clearTimeout(t);
+    }
+    if (idx === shownIdx) return;
+
+    const target = words[idx] ?? null;
+    const src = (target?.imageSrc ?? "").trim();
+    let cancelled = false;
+
+    const commit = () => {
+      if (cancelled) return;
+      setShownIdx(idx);
+    };
+
+    if (!src) {
+      const t = window.setTimeout(commit, 0);
+      return () => {
+        cancelled = true;
+        window.clearTimeout(t);
+      };
+    }
+
+    const img = new Image();
+    img.decoding = "async";
+    img.onload = commit;
+    img.onerror = commit;
+    img.src = src;
+
+    return () => {
+      cancelled = true;
+      img.onload = null;
+      img.onerror = null;
+    };
+  }, [idx, shownIdx, words]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -225,6 +266,12 @@ export default function StudyClient() {
       if (removeIndex === oldIdx) return Math.min(oldIdx, nextWords.length - 1);
       return oldIdx;
     });
+    setShownIdx((oldIdx) => {
+      if (nextWords.length === 0) return 0;
+      if (removeIndex < oldIdx) return oldIdx - 1;
+      if (removeIndex === oldIdx) return Math.min(oldIdx, nextWords.length - 1);
+      return oldIdx;
+    });
   }
 
   const actions = (
@@ -311,9 +358,9 @@ export default function StudyClient() {
             role="group"
             aria-label={flipped ? "Card back" : "Card front"}
           >
-            <div className="[perspective:1400px]">
+            <div className="perspective-[1400px]">
               <div
-                className={`${CARD_FLIP_H} transform-gpu transition-[transform] duration-500 ease-[cubic-bezier(0.4,0.2,0.2,1)] will-change-transform motion-reduce:transition-none motion-reduce:duration-0 [transform-style:preserve-3d]`}
+                className={`${CARD_FLIP_H} transform-gpu transition-[transform] duration-500 ease-[cubic-bezier(0.4,0.2,0.2,1)] will-change-transform motion-reduce:transition-none motion-reduce:duration-0 transform-3d`}
                 style={{
                   transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
                 }}
@@ -344,12 +391,13 @@ export default function StudyClient() {
                     <div
                       className={`${MAIN_SLOT} flex flex-col items-center justify-center gap-4 px-0 py-1`}
                     >
-                      <div className="w-full max-w-md shrink-0 overflow-hidden rounded-2xl ring-1 ring-zinc-200/80 dark:ring-zinc-800">
+                      <div className="w-full max-w-md shrink-0 overflow-hidden rounded-2xl bg-white dark:bg-zinc-950">
                         <WordImage
                           src={current.imageSrc}
                           alt=""
-                          objectPosition={current.imageObjectPosition}
-                          className="aspect-16/10 w-full object-cover"
+                          placeholder="blur"
+                          loading="lazy"
+                          className="aspect-16/10 w-full object-contain object-center"
                         />
                       </div>
                       <div className="w-full shrink-0 text-center">
