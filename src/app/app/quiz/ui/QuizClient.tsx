@@ -25,6 +25,7 @@ export default function QuizClient() {
   const [step, setStep] = useState(0);
   const [picked, setPicked] = useState<(number | null)[]>([]);
   const [finished, setFinished] = useState(false);
+  const [imageFullscreenStep, setImageFullscreenStep] = useState<number | null>(null);
   const forgottenMarkedRef = useRef<Set<string>>(new Set());
 
   const loadQuiz = useCallback(async () => {
@@ -32,6 +33,7 @@ export default function QuizClient() {
     setError(null);
     setFinished(false);
     setStep(0);
+    setImageFullscreenStep(null);
     setPicked([]);
     forgottenMarkedRef.current.clear();
 
@@ -60,6 +62,18 @@ export default function QuizClient() {
   const total = questions.length;
   const current = questions[step] ?? null;
   const choiceLocked = picked[step] !== null;
+  const canExpandImage = Boolean(current?.imageSrc?.trim());
+  const imageFullscreen =
+    !finished && !loading && imageFullscreenStep === step && canExpandImage;
+
+  useEffect(() => {
+    if (!imageFullscreen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [imageFullscreen]);
 
   /** Wrong answer → move card to Needs review (FORGOTTEN), once per word per quiz load. */
   useEffect(() => {
@@ -101,6 +115,7 @@ export default function QuizClient() {
   );
 
   const nextOrFinish = useCallback(() => {
+    setImageFullscreenStep(null);
     if (step >= total - 1) {
       setFinished(true);
       return;
@@ -109,6 +124,7 @@ export default function QuizClient() {
   }, [step, total]);
 
   const prev = useCallback(() => {
+    setImageFullscreenStep(null);
     setStep((s) => Math.max(0, s - 1));
   }, []);
 
@@ -116,6 +132,14 @@ export default function QuizClient() {
     if (finished || loading || error || !current || total === 0) return;
 
     function onKey(e: KeyboardEvent) {
+      if (imageFullscreen) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setImageFullscreenStep(null);
+        }
+        return;
+      }
+
       const t = e.target as HTMLElement | null;
       if (
         t &&
@@ -161,6 +185,7 @@ export default function QuizClient() {
     current,
     error,
     finished,
+    imageFullscreen,
     loading,
     nextOrFinish,
     picked,
@@ -218,6 +243,39 @@ export default function QuizClient() {
         </div>
       ) : null}
 
+      {imageFullscreen && canExpandImage && current ? (
+        <div
+          className="fixed inset-0 z-100 flex flex-col"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Full screen image"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-zinc-900/25 backdrop-blur-md dark:bg-black/40"
+            onClick={() => setImageFullscreenStep(null)}
+            aria-label="Close full screen image"
+          />
+          <button
+            type="button"
+            className="absolute right-3 top-3 z-10 rounded-lg border border-zinc-200/80 bg-white/90 px-3 py-2 text-sm font-medium text-zinc-800 shadow-sm backdrop-blur-sm transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900/90 dark:text-zinc-100 dark:hover:bg-zinc-900 dark:focus-visible:ring-zinc-500 sm:right-4 sm:top-4"
+            onClick={() => setImageFullscreenStep(null)}
+          >
+            Close
+          </button>
+          <div className="pointer-events-none relative z-10 flex min-h-0 flex-1 items-center justify-center p-4 pt-14 sm:p-6 sm:pt-16">
+            <WordImage
+              src={current.imageSrc}
+              alt=""
+              placeholder="blur"
+              loading="eager"
+              fetchPriority="high"
+              className="max-h-full max-w-full object-contain drop-shadow-lg"
+            />
+          </div>
+        </div>
+      ) : null}
+
       {!loading && !error && total > 0 && !finished && current ? (
         <div className="mt-4 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row lg:gap-5">
           {/* Prompt column */}
@@ -233,15 +291,26 @@ export default function QuizClient() {
                 Word
               </p>
             </div>
-            <div className="relative min-h-36 max-h-[26vh] shrink-0 overflow-hidden bg-white dark:bg-zinc-950 lg:max-h-none lg:min-h-0 lg:flex-1 lg:shrink">
+            <button
+              type="button"
+              disabled={!canExpandImage}
+              onClick={() => setImageFullscreenStep(step)}
+              aria-label={canExpandImage ? "View image full screen" : undefined}
+              className={[
+                "relative min-h-36 max-h-[26vh] w-full shrink-0 overflow-hidden bg-white dark:bg-zinc-950 lg:max-h-none lg:min-h-0 lg:flex-1 lg:shrink",
+                canExpandImage
+                  ? "cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-zinc-400 dark:focus-visible:ring-zinc-500"
+                  : "cursor-default",
+              ].join(" ")}
+            >
               <WordImage
                 src={current.imageSrc}
                 alt=""
                 placeholder="blur"
                 loading="lazy"
-                className="absolute inset-0 size-full object-contain object-center"
+                className="pointer-events-none absolute inset-0 size-full object-contain object-center"
               />
-            </div>
+            </button>
           </article>
 
           {/* Answers column */}
