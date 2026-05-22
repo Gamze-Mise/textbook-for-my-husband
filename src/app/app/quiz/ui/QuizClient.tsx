@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import AppNavLink from "@/components/app/AppNavLink";
+import AppQuizNavLink from "@/components/app/AppQuizNavLink";
 import AppPageHeader from "@/components/app/AppPageHeader";
 import AppAccountMenu from "@/components/app/AppAccountMenu";
 import AlertBanner from "@/components/app/AlertBanner";
@@ -15,7 +16,11 @@ type QuizJson =
   | { error: string }
   | null;
 
-export default function QuizClient() {
+type Props = {
+  showImages?: boolean;
+};
+
+export default function QuizClient({ showImages = true }: Props) {
   const promptId = useId();
   const rootRef = useRef<HTMLDivElement | null>(null);
 
@@ -62,7 +67,7 @@ export default function QuizClient() {
   const total = questions.length;
   const current = questions[step] ?? null;
   const choiceLocked = picked[step] !== null;
-  const canExpandImage = Boolean(current?.imageSrc?.trim());
+  const canExpandImage = showImages && Boolean(current?.imageSrc?.trim());
   const imageFullscreen =
     !finished && !loading && imageFullscreenStep === step && canExpandImage;
 
@@ -216,6 +221,7 @@ export default function QuizClient() {
             <>
               <AppNavLink href="/app">Library</AppNavLink>
               <AppNavLink href="/app/study">Study</AppNavLink>
+              <AppQuizNavLink />
               <AppAccountMenu />
             </>
           }
@@ -277,45 +283,70 @@ export default function QuizClient() {
       ) : null}
 
       {!loading && !error && total > 0 && !finished && current ? (
-        <div className="mt-4 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row lg:gap-5">
-          {/* Prompt column */}
-          <article className="flex max-h-[min(40vh,24rem)] min-h-0 shrink-0 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950 lg:max-h-none lg:min-h-0 lg:w-[46%] lg:flex-1">
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-100 px-3 py-2 dark:border-zinc-800 sm:px-4">
-              <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                Question{" "}
-                <span className="tabular-nums text-zinc-700 dark:text-zinc-200">
-                  {step + 1} / {total}
-                </span>
-              </p>
-              <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
-                Word
-              </p>
-            </div>
-            <button
-              type="button"
-              disabled={!canExpandImage}
-              onClick={() => setImageFullscreenStep(step)}
-              aria-label={canExpandImage ? "View image full screen" : undefined}
-              className={[
-                "relative min-h-36 max-h-[26vh] w-full shrink-0 overflow-hidden bg-white dark:bg-zinc-950 lg:max-h-none lg:min-h-0 lg:flex-1 lg:shrink",
-                canExpandImage
-                  ? "cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-zinc-400 dark:focus-visible:ring-zinc-500"
-                  : "cursor-default",
-              ].join(" ")}
-            >
-              <WordImage
-                src={current.imageSrc}
-                alt=""
-                placeholder="blur"
-                loading="lazy"
-                className="pointer-events-none absolute inset-0 size-full object-contain object-center"
-              />
-            </button>
-          </article>
+        <div
+          className={[
+            "mt-4 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden",
+            showImages ? "lg:flex-row lg:gap-5" : "lg:items-center",
+          ].join(" ")}
+        >
+          {showImages ? (
+            <article className="flex max-h-[min(40vh,24rem)] min-h-0 shrink-0 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950 lg:max-h-none lg:min-h-0 lg:w-[46%] lg:flex-1">
+              <div className="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-100 px-3 py-2 dark:border-zinc-800 sm:px-4">
+                <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  Question{" "}
+                  <span className="tabular-nums text-zinc-700 dark:text-zinc-200">
+                    {step + 1} / {total}
+                  </span>
+                </p>
+                <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+                  Word
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={!canExpandImage}
+                onClick={() => setImageFullscreenStep(step)}
+                aria-label={canExpandImage ? "View image full screen" : undefined}
+                className={[
+                  "relative min-h-36 max-h-[26vh] w-full shrink-0 overflow-hidden bg-white dark:bg-zinc-950 lg:max-h-none lg:min-h-0 lg:flex-1 lg:shrink",
+                  canExpandImage
+                    ? "cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-zinc-400 dark:focus-visible:ring-zinc-500"
+                    : "cursor-default",
+                ].join(" ")}
+              >
+                <WordImage
+                  src={current.imageSrc}
+                  alt=""
+                  placeholder="blur"
+                  loading="lazy"
+                  className="pointer-events-none absolute inset-0 size-full object-contain object-center"
+                />
+              </button>
+            </article>
+          ) : null}
 
-          {/* Answers column */}
-          <article className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950 lg:w-[54%] lg:flex-1">
+          <article
+            className={[
+              "flex min-h-0 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950",
+              showImages
+                ? "min-h-0 flex-1 lg:w-[54%] lg:flex-1"
+                : "min-h-0 w-full flex-1 lg:w-[54%] lg:max-w-[54%] lg:flex-none",
+            ].join(" ")}
+          >
             <div className="flex min-h-0 flex-1 flex-col gap-2 px-3 py-3 sm:gap-3 sm:px-4 sm:py-4">
+              <div className="flex shrink-0 items-center justify-between gap-2">
+                <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  Question{" "}
+                  <span className="tabular-nums text-zinc-700 dark:text-zinc-200">
+                    {step + 1} / {total}
+                  </span>
+                </p>
+                {!showImages ? (
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+                    Word
+                  </p>
+                ) : null}
+              </div>
               <h2 className="shrink-0 text-2xl font-semibold leading-tight tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-3xl">
                 {current.term}
               </h2>

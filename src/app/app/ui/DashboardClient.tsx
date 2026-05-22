@@ -10,6 +10,7 @@ import LogoMark from "@/components/LogoMark";
 import AlertBanner from "@/components/app/AlertBanner";
 import AppAccountMenu from "@/components/app/AppAccountMenu";
 import AppNavLink from "@/components/app/AppNavLink";
+import AppQuizNavLink from "@/components/app/AppQuizNavLink";
 import { fetchAudioTts } from "@/lib/fetchAudioTts";
 import { isLocalDevHost } from "@/lib/isLocalDevHost";
 import {
@@ -611,7 +612,7 @@ export default function DashboardClient() {
             + Add word
           </button>
           <AppNavLink href="/app/study">Study</AppNavLink>
-          <AppNavLink href="/app/quiz">Quiz</AppNavLink>
+          <AppQuizNavLink />
 
           <AppAccountMenu />
         </div>

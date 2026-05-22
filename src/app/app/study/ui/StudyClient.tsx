@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AppNavLink from "@/components/app/AppNavLink";
+import AppQuizNavLink from "@/components/app/AppQuizNavLink";
 import AppPageHeader from "@/components/app/AppPageHeader";
 import AppAccountMenu from "@/components/app/AppAccountMenu";
 import AlertBanner from "@/components/app/AlertBanner";
@@ -312,7 +313,7 @@ export default function StudyClient() {
         actions={
           <>
             <AppNavLink href="/app">Library</AppNavLink>
-            <AppNavLink href="/app/quiz">Quiz</AppNavLink>
+            <AppQuizNavLink />
             <AppAccountMenu />
           </>
         }
