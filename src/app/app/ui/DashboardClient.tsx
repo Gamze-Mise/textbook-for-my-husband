@@ -6,6 +6,7 @@ import { validateWordImageFile } from "@/lib/wordImageConstraints";
 import { clampImageFocus } from "@/lib/wordImageFocus";
 import { wordBucketBadgeClass } from "@/lib/wordBucketStyles";
 import WordImage from "@/components/WordImage";
+import WordImageFullscreenOverlay from "@/components/WordImageFullscreenOverlay";
 import LogoMark from "@/components/LogoMark";
 import AlertBanner from "@/components/app/AlertBanner";
 import AppAccountMenu from "@/components/app/AppAccountMenu";
@@ -981,6 +982,9 @@ function LibraryCard({
   onDelete: (w: WordCard) => void;
   onMark: (w: WordCard, bucket: "KNOWN" | "FORGOTTEN") => void;
 }) {
+  const [imageFullscreen, setImageFullscreen] = useState(false);
+  const canExpandImage = Boolean(word.imageSrc?.trim());
+
   const termSize = textSizeForLength({
     len: word.term.length,
     thresholds: [14, 22],
@@ -1002,10 +1006,7 @@ function LibraryCard({
       <button
         type="button"
         className="inline-flex size-9 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-200"
-        onClick={(e) => {
-          e.stopPropagation();
-          onEdit(word);
-        }}
+        onClick={() => onEdit(word)}
         aria-label="Edit card"
         title="Edit"
       >
@@ -1027,10 +1028,7 @@ function LibraryCard({
       <button
         type="button"
         className="inline-flex size-9 items-center justify-center rounded-xl border border-red-200 bg-white text-red-700 dark:border-red-900/50 dark:bg-zinc-950 dark:text-red-400"
-        onClick={(e) => {
-          e.stopPropagation();
-          onDelete(word);
-        }}
+        onClick={() => onDelete(word)}
         aria-label="Delete card"
         title="Delete"
       >
@@ -1053,15 +1051,13 @@ function LibraryCard({
   );
 
   return (
+    <>
     <div className="group flex h-full min-h-88 flex-col rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950">
       {isLocalDev ? (
         <button
           type="button"
           className="mb-3 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs font-medium text-zinc-800 disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-200"
-          onClick={(e) => {
-            e.stopPropagation();
-            void onRegenerate(word);
-          }}
+          onClick={() => void onRegenerate(word)}
           disabled={isRegenerating || !word.term.trim()}
         >
           {isRegenerating ? "Regenerating audio…" : "Regenerate audio"}
@@ -1077,12 +1073,25 @@ function LibraryCard({
         >
           {wordBucketLabel(word.bucket)}
         </span>
-        <WordImage
-          src={word.imageSrc}
-          alt=""
-          objectPosition={word.imageObjectPosition}
-          className="aspect-[16/10] w-full object-cover"
-        />
+        <button
+          type="button"
+          disabled={!canExpandImage}
+          onClick={() => setImageFullscreen(true)}
+          aria-label={canExpandImage ? `View image for ${word.term}` : undefined}
+          className={[
+            "relative block w-full",
+            canExpandImage
+              ? "cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-950"
+              : "cursor-default",
+          ].join(" ")}
+        >
+          <WordImage
+            src={word.imageSrc}
+            alt=""
+            objectPosition={word.imageObjectPosition}
+            className="aspect-[16/10] w-full object-cover"
+          />
+        </button>
       </div>
 
       <div className="mt-3 flex items-start justify-between gap-3">
@@ -1142,24 +1151,27 @@ function LibraryCard({
         <button
           type="button"
           className="flex-1 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium transition active:scale-[0.98] dark:border-zinc-800 dark:bg-zinc-950"
-          onClick={(e) => {
-            e.stopPropagation();
-            void onMark(word, "KNOWN");
-          }}
+          onClick={() => void onMark(word, "KNOWN")}
         >
           Got it
         </button>
         <button
           type="button"
           className="flex-1 rounded-xl bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition active:scale-[0.98] dark:bg-zinc-100 dark:text-zinc-950"
-          onClick={(e) => {
-            e.stopPropagation();
-            void onMark(word, "FORGOTTEN");
-          }}
+          onClick={() => void onMark(word, "FORGOTTEN")}
         >
           Again
         </button>
       </div>
     </div>
+
+    <WordImageFullscreenOverlay
+      open={imageFullscreen && canExpandImage}
+      onClose={() => setImageFullscreen(false)}
+      src={word.imageSrc}
+      objectPosition={word.imageObjectPosition}
+      ariaLabel={`Image for ${word.term}`}
+    />
+    </>
   );
 }

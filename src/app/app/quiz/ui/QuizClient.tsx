@@ -7,6 +7,7 @@ import AppPageHeader from "@/components/app/AppPageHeader";
 import AppAccountMenu from "@/components/app/AppAccountMenu";
 import AlertBanner from "@/components/app/AlertBanner";
 import WordImage from "@/components/WordImage";
+import WordImageFullscreenOverlay from "@/components/WordImageFullscreenOverlay";
 import { btnPrimary, btnSecondary } from "@/components/ui/buttonClasses";
 import type { QuizQuestion } from "@/types/quiz";
 import { quizCorrectCount } from "@/types/quiz";
@@ -70,15 +71,6 @@ export default function QuizClient({ showImages = true }: Props) {
   const canExpandImage = showImages && Boolean(current?.imageSrc?.trim());
   const imageFullscreen =
     !finished && !loading && imageFullscreenStep === step && canExpandImage;
-
-  useEffect(() => {
-    if (!imageFullscreen) return;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [imageFullscreen]);
 
   /** Wrong answer → move card to Needs review (FORGOTTEN), once per word per quiz load. */
   useEffect(() => {
@@ -249,38 +241,11 @@ export default function QuizClient({ showImages = true }: Props) {
         </div>
       ) : null}
 
-      {imageFullscreen && canExpandImage && current ? (
-        <div
-          className="fixed inset-0 z-100 flex flex-col"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Full screen image"
-        >
-          <button
-            type="button"
-            className="absolute inset-0 bg-zinc-900/25 backdrop-blur-md dark:bg-black/40"
-            onClick={() => setImageFullscreenStep(null)}
-            aria-label="Close full screen image"
-          />
-          <button
-            type="button"
-            className="absolute right-3 top-3 z-10 rounded-lg border border-zinc-200/80 bg-white/90 px-3 py-2 text-sm font-medium text-zinc-800 shadow-sm backdrop-blur-sm transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 dark:border-zinc-700 dark:bg-zinc-900/90 dark:text-zinc-100 dark:hover:bg-zinc-900 dark:focus-visible:ring-zinc-500 sm:right-4 sm:top-4"
-            onClick={() => setImageFullscreenStep(null)}
-          >
-            Close
-          </button>
-          <div className="pointer-events-none relative z-10 flex min-h-0 flex-1 items-center justify-center p-4 pt-14 sm:p-6 sm:pt-16">
-            <WordImage
-              src={current.imageSrc}
-              alt=""
-              placeholder="blur"
-              loading="eager"
-              fetchPriority="high"
-              className="max-h-full max-w-full object-contain drop-shadow-lg"
-            />
-          </div>
-        </div>
-      ) : null}
+      <WordImageFullscreenOverlay
+        open={Boolean(imageFullscreen && current)}
+        onClose={() => setImageFullscreenStep(null)}
+        src={current?.imageSrc}
+      />
 
       {!loading && !error && total > 0 && !finished && current ? (
         <div
