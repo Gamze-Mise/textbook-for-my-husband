@@ -9,8 +9,10 @@ import AlertBanner from "@/components/app/AlertBanner";
 import WordImage from "@/components/WordImage";
 import WordImageFullscreenOverlay from "@/components/WordImageFullscreenOverlay";
 import { btnPrimary, btnSecondary } from "@/components/ui/buttonClasses";
+import { wordBucketBadgeClass } from "@/lib/wordBucketStyles";
 import type { QuizQuestion } from "@/types/quiz";
 import { quizCorrectCount } from "@/types/quiz";
+import { wordBucketLabel } from "@/types/word";
 
 type QuizJson =
   | { ok: true; questions: QuizQuestion[] }
@@ -32,6 +34,8 @@ export default function QuizClient({ showImages = true }: Props) {
   const [picked, setPicked] = useState<(number | null)[]>([]);
   const [finished, setFinished] = useState(false);
   const [imageFullscreenStep, setImageFullscreenStep] = useState<number | null>(null);
+  const [markingWordId, setMarkingWordId] = useState<string | null>(null);
+  const [markError, setMarkError] = useState<string | null>(null);
   const forgottenMarkedRef = useRef<Set<string>>(new Set());
 
   const loadQuiz = useCallback(async () => {
@@ -42,6 +46,8 @@ export default function QuizClient({ showImages = true }: Props) {
     setImageFullscreenStep(null);
     setPicked([]);
     forgottenMarkedRef.current.clear();
+    setMarkError(null);
+    setMarkingWordId(null);
 
     const res = await fetch("/api/quiz", { cache: "no-store" });
     const json = (await res.json().catch(() => null)) as QuizJson;
@@ -81,12 +87,34 @@ export default function QuizClient({ showImages = true }: Props) {
     if (current.bucket === "FORGOTTEN") return;
     if (forgottenMarkedRef.current.has(current.wordId)) return;
     forgottenMarkedRef.current.add(current.wordId);
+    setQuestions((prev) =>
+      prev.map((q) => (q.wordId === current.wordId ? { ...q, bucket: "FORGOTTEN" } : q)),
+    );
     void fetch(`/api/words/${current.wordId}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ bucket: "FORGOTTEN" }),
     }).catch(() => {});
   }, [current, error, finished, loading, picked, step]);
+
+  const markWordBucket = useCallback(async (wordId: string, bucket: "KNOWN" | "FORGOTTEN") => {
+    setMarkingWordId(wordId);
+    setMarkError(null);
+    const res = await fetch(`/api/words/${wordId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ bucket }),
+    });
+    setMarkingWordId(null);
+    if (!res.ok) {
+      setMarkError("Could not update card status. Check your connection.");
+      return;
+    }
+    if (bucket === "FORGOTTEN") forgottenMarkedRef.current.add(wordId);
+    setQuestions((prev) =>
+      prev.map((q) => (q.wordId === wordId ? { ...q, bucket } : q)),
+    );
+  }, []);
 
   const score = useMemo(() => {
     if (!finished || !questions.length) return null;
@@ -227,9 +255,9 @@ export default function QuizClient({ showImages = true }: Props) {
         />
       </div>
 
-      {error ? (
+      {(error || markError) ? (
         <div className="mt-4 shrink-0">
-          <AlertBanner variant="warning">{error}</AlertBanner>
+          <AlertBanner variant="warning">{error ?? markError}</AlertBanner>
         </div>
       ) : null}
 
@@ -441,6 +469,44 @@ export default function QuizClient({ showImages = true }: Props) {
                       </p>
                     </div>
                   ) : null}
+                  <div className="flex flex-col gap-2 border-t border-zinc-200/80 pt-2.5 dark:border-zinc-700 sm:flex-row sm:items-center sm:justify-between">
+                    <span
+                      className={[
+                        "inline-flex w-fit rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                        wordBucketBadgeClass(current.bucket),
+                      ].join(" ")}
+                    >
+                      {wordBucketLabel(current.bucket)}
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={markingWordId === current.wordId}
+                        onClick={() => void markWordBucket(current.wordId, "KNOWN")}
+                        className={[
+                          "flex-1 rounded-xl border px-3 py-2 text-xs font-medium transition active:scale-[0.98] disabled:opacity-60 sm:flex-none sm:text-sm",
+                          current.bucket === "KNOWN"
+                            ? "border-emerald-500 bg-emerald-50 text-emerald-950 dark:border-emerald-400/80 dark:bg-emerald-950/40 dark:text-emerald-50"
+                            : "border-zinc-200 bg-white text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100",
+                        ].join(" ")}
+                      >
+                        Got it
+                      </button>
+                      <button
+                        type="button"
+                        disabled={markingWordId === current.wordId}
+                        onClick={() => void markWordBucket(current.wordId, "FORGOTTEN")}
+                        className={[
+                          "flex-1 rounded-xl px-3 py-2 text-xs font-medium transition active:scale-[0.98] disabled:opacity-60 sm:flex-none sm:text-sm",
+                          current.bucket === "FORGOTTEN"
+                            ? "border-amber-500 bg-amber-50 text-amber-950 dark:border-amber-400/80 dark:bg-amber-950/40 dark:text-amber-50"
+                            : "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-950",
+                        ].join(" ")}
+                      >
+                        Again
+                      </button>
+                    </div>
+                  </div>
                 </div>
               ) : null}
 
@@ -491,6 +557,7 @@ export default function QuizClient({ showImages = true }: Props) {
                   <li key={q.wordId} className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0">
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
                       <span className="font-medium text-zinc-900 dark:text-zinc-100">{q.term}</span>
+                    <div className="flex flex-wrap items-center gap-2">
                       <span
                         className={
                           ok
@@ -502,6 +569,15 @@ export default function QuizClient({ showImages = true }: Props) {
                       >
                         {ok ? "Correct" : skipped ? "Skipped" : "Wrong"}
                       </span>
+                      <span
+                        className={[
+                          "rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                          wordBucketBadgeClass(q.bucket),
+                        ].join(" ")}
+                      >
+                        {wordBucketLabel(q.bucket)}
+                      </span>
+                    </div>
                     </div>
                     {!ok ? (
                       <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
