@@ -3,6 +3,8 @@
 import Link from "next/link";
 import LogoMark from "@/components/LogoMark";
 import ThemeToggle from "@/components/ThemeToggle";
+import LandingAppPreview from "@/components/marketing/LandingAppPreview";
+
 const linkSecondary =
   "inline-flex cursor-pointer items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-900 transition hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:hover:bg-zinc-900";
 
@@ -72,6 +74,10 @@ export default function LandingPage({
                 </Link>
               ) : null}
             </div>
+          </section>
+
+          <section className="mt-12 lg:mt-14">
+            <LandingAppPreview />
           </section>
 
           <section className="mt-14 grid gap-4 sm:grid-cols-3 lg:mt-16">
