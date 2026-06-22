@@ -9,9 +9,13 @@ import ThemeToggle from "@/components/ThemeToggle";
 
 type LoginClientProps = {
   callbackUrl: string;
+  previewEnabled?: boolean;
 };
 
-export default function LoginClient({ callbackUrl }: LoginClientProps) {
+export default function LoginClient({
+  callbackUrl,
+  previewEnabled = false,
+}: LoginClientProps) {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -62,7 +66,10 @@ export default function LoginClient({ callbackUrl }: LoginClientProps) {
         <div className="flex justify-end">
           <ThemeToggle />
         </div>
-        <div className="flex items-center gap-3">
+        <Link
+          href="/"
+          className="flex items-center gap-3 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 dark:focus-visible:ring-zinc-500"
+        >
           <LogoMark />
           <div className="flex flex-col">
             <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
@@ -72,7 +79,7 @@ export default function LoginClient({ callbackUrl }: LoginClientProps) {
               Welcome back
             </h1>
           </div>
-        </div>
+        </Link>
         <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
           Sign in to your account.
         </p>
@@ -125,6 +132,30 @@ export default function LoginClient({ callbackUrl }: LoginClientProps) {
           >
             {loading ? "Signing in..." : "Sign in"}
           </button>
+
+          {previewEnabled ? (
+            <>
+              <div className="relative py-1">
+                <div
+                  className="absolute inset-0 flex items-center"
+                  aria-hidden
+                >
+                  <div className="w-full border-t border-zinc-200 dark:border-zinc-800" />
+                </div>
+                <div className="relative flex justify-center">
+                  <span className="bg-white px-2 text-xs text-zinc-400 dark:bg-zinc-950">
+                    or
+                  </span>
+                </div>
+              </div>
+              <Link
+                href="/preview"
+                className="block w-full rounded-xl border border-zinc-200 px-3 py-2 text-center text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
+              >
+                Preview demo
+              </Link>
+            </>
+          ) : null}
         </form>
 
         <div className="mt-4 flex items-center justify-between text-sm text-zinc-600 dark:text-zinc-400">
@@ -133,12 +164,6 @@ export default function LoginClient({ callbackUrl }: LoginClientProps) {
           </Link>
           <Link className="underline" href="/register">
             Create account
-          </Link>
-        </div>
-
-        <div className="mt-6 text-sm text-zinc-600 dark:text-zinc-400">
-          <Link className="underline" href="/">
-            Back to home
           </Link>
         </div>
       </div>

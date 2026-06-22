@@ -1,21 +1,14 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
 import { buildQuizQuestionsForWords } from "@/lib/buildQuizQuestions";
 import { prisma } from "@/lib/prisma";
+import { isPreviewUserId, requirePreviewUserId } from "@/lib/preview/server";
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  const userId = session?.user?.id;
-  if (!userId)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const uid = Number(userId);
-  if (!Number.isFinite(uid)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const userId = requirePreviewUserId();
+  if (!isPreviewUserId(userId)) return userId;
 
   const words = await prisma.word.findMany({
-    where: { userId: uid },
+    where: { userId },
   });
 
   const built = buildQuizQuestionsForWords(words);

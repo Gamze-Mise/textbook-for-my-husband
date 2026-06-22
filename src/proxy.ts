@@ -5,6 +5,11 @@ import { getToken } from "next-auth/jwt";
 export async function proxy(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
 
+  const isPreview =
+    pathname.startsWith("/preview") || pathname.startsWith("/api/preview");
+
+  if (isPreview) return NextResponse.next();
+
   const isProtected =
     pathname.startsWith("/app") ||
     pathname.startsWith("/api/words") ||
@@ -28,6 +33,8 @@ export async function proxy(req: NextRequest) {
 
 export const config = {
   matcher: [
+    "/preview/:path*",
+    "/api/preview/:path*",
     "/app/:path*",
     "/api/words/:path*",
     "/api/quiz",

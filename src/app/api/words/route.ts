@@ -3,13 +3,13 @@ import { z } from "zod";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { loadUserWords } from "@/lib/loadUserWords";
 import {
   cloudinaryExampleAudioFolder,
   cloudinaryWordAudioFolder,
   cloudinaryWordImageFolder,
   normalizeStoredPublicId,
 } from "@/lib/cloudinaryAsset";
-import { orderMixedDeck } from "@/lib/mixedDeckOrder";
 import { wordToClient } from "@/lib/wordSerialize";
 
 const createSchema = z.object({
@@ -40,39 +40,13 @@ export async function GET(req: Request) {
   const forLibrary =
     searchParams.get("library") === "1" || searchParams.get("library") === "true";
 
-  if (bucket === "MIXED" && !forLibrary) {
-    const words = await prisma.word.findMany({
-      where: { userId: uid },
-      orderBy: { createdAt: "desc" },
-    });
-
-    const forgotten = words.filter((w) => w.bucket === "FORGOTTEN");
-    const toStudy = words.filter((w) => w.bucket === "TO_STUDY");
-    const known = words.filter((w) => w.bucket === "KNOWN");
-
-    const mixed = orderMixedDeck({ forgotten, toStudy, known });
-    return NextResponse.json({
-      ok: true,
-      words: mixed.map(wordToClient),
-    });
-  }
-
-  const whereBucket =
-    bucket === "KNOWN" || bucket === "TO_STUDY" || bucket === "FORGOTTEN"
-      ? bucket
-      : null;
-
-  const words = await prisma.word.findMany({
-    where: {
-      userId: uid,
-      ...(bucket === "MIXED" || !whereBucket
-        ? {}
-        : { bucket: whereBucket }),
-    },
-    orderBy: { createdAt: "desc" },
+  const words = await loadUserWords({
+    userId: uid,
+    bucket,
+    forLibrary,
   });
 
-  return NextResponse.json({ ok: true, words: words.map(wordToClient) });
+  return NextResponse.json({ ok: true, words });
 }
 
 export async function POST(req: Request) {

@@ -44,10 +44,14 @@ function ChevronDown({ open }: { open: boolean }) {
   );
 }
 
-function AppQuizNavLinkInner() {
+type AppQuizNavLinkProps = {
+  basePath?: string;
+};
+
+function AppQuizNavLinkInner({ basePath = "/app/quiz" }: AppQuizNavLinkProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const onQuiz = pathname === "/app/quiz";
+  const onQuiz = pathname === basePath;
   const imagesOff = searchParams.get("images") === "0";
   const menuId = useId();
 
@@ -142,7 +146,7 @@ function AppQuizNavLinkInner() {
       >
         <div className="flex min-w-46 flex-col gap-0.5 rounded-xl border border-zinc-200 bg-white p-1 shadow-lg ring-1 ring-black/5 dark:border-zinc-800 dark:bg-zinc-950 dark:ring-white/10">
           <Link
-            href="/app/quiz"
+            href={basePath}
             role="menuitem"
             className={[
               menuItemClass,
@@ -153,7 +157,7 @@ function AppQuizNavLinkInner() {
             With images
           </Link>
           <Link
-            href="/app/quiz?images=0"
+            href={`${basePath}?images=0`}
             role="menuitem"
             className={[
               menuItemClass,
@@ -169,16 +173,18 @@ function AppQuizNavLinkInner() {
   );
 }
 
-export default function AppQuizNavLink() {
+export default function AppQuizNavLink({
+  basePath = "/app/quiz",
+}: AppQuizNavLinkProps) {
   return (
     <Suspense
       fallback={
-        <Link href="/app/quiz" className={btnSecondaryCompact}>
+        <Link href={basePath} className={btnSecondaryCompact}>
           Quiz
         </Link>
       }
     >
-      <AppQuizNavLinkInner />
+      <AppQuizNavLinkInner basePath={basePath} />
     </Suspense>
   );
 }

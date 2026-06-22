@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import LandingPage from "@/components/marketing/LandingPage";
+import { isPreviewEnabled } from "@/lib/preview/userId";
 
 export const metadata: Metadata = {
   title: "Vocabulary — Personal vocabulary trainer",
@@ -8,5 +9,5 @@ export const metadata: Metadata = {
 };
 
 export default function Home() {
-  return <LandingPage />;
+  return <LandingPage previewEnabled={isPreviewEnabled()} />;
 }

@@ -1,10 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import AppNavLink from "@/components/app/AppNavLink";
-import AppQuizNavLink from "@/components/app/AppQuizNavLink";
+import AppNavActions from "@/components/app/AppNavActions";
 import AppPageHeader from "@/components/app/AppPageHeader";
-import AppAccountMenu from "@/components/app/AppAccountMenu";
+import PreviewModeBanner from "@/components/preview/PreviewModeBanner";
+import { wordsApiPath } from "@/lib/preview/paths";
+import { persistWordBucket } from "@/lib/preview/persistWordBucket";
+import { usePreviewBucketOverrides } from "@/lib/preview/usePreviewBucketOverrides";
+import { usePreviewDeck } from "@/lib/preview/usePreviewDeck";
+import { isPreviewLocalWordId } from "@/lib/preview/previewLocalWord";
+import type { AppMode } from "@/types/appMode";
 import AlertBanner from "@/components/app/AlertBanner";
 import WordImage from "@/components/WordImage";
 import { tabPillActive, tabPillIdle } from "@/components/ui/buttonClasses";
@@ -23,10 +28,22 @@ const AUDIO_SLOT =
 const FACE_SHELL =
   "absolute inset-0 flex flex-col rounded-2xl border border-zinc-200 bg-white shadow-md dark:border-zinc-700 dark:bg-zinc-950 dark:shadow-[0_1px_0_0_rgba(255,255,255,0.04)]";
 
-export default function StudyClient() {
+export default function StudyClient({
+  mode = "app",
+}: {
+  mode?: AppMode;
+}) {
+  const isPreview = mode === "preview";
+  const { setOverride } = usePreviewBucketOverrides();
   const studyRootRef = useRef<HTMLDivElement | null>(null);
   const [bucket, setBucket] = useState<DeckTab>("MIXED");
-  const [words, setWords] = useState<WordCard[]>([]);
+  const [rawWords, setRawWords] = useState<WordCard[]>([]);
+  const { words: deckWords } = usePreviewDeck(mode, rawWords, bucket);
+  const [studiedIds, setStudiedIds] = useState<Set<string>>(() => new Set());
+  const words = useMemo(
+    () => deckWords.filter((w) => !studiedIds.has(w.id)),
+    [deckWords, studiedIds],
+  );
   // idx: navigation target; shownIdx: what's actually rendered (text+image together)
   const [idx, setIdx] = useState(0);
   const [shownIdx, setShownIdx] = useState(0);
@@ -51,8 +68,9 @@ export default function StudyClient() {
     setIdx(0);
     setShownIdx(0);
     setExampleSrcOverride({});
+    setStudiedIds(new Set());
 
-    const res = await fetch(`/api/words?bucket=${bucket}`);
+    const res = await fetch(`${wordsApiPath(mode)}?bucket=${bucket}`);
     const json = (await res.json().catch(() => null)) as
       | { ok: true; words: WordCard[] }
       | { error: string }
@@ -61,12 +79,12 @@ export default function StudyClient() {
     setLoading(false);
 
     if (!res.ok || !json || "error" in json) {
-      setWords([]);
+      setRawWords([]);
       setError(json && "error" in json ? json.error : "Failed to load cards.");
       return;
     }
 
-    setWords(json.words);
+    setRawWords(json.words);
   }
 
   useEffect(() => {
@@ -200,6 +218,7 @@ export default function StudyClient() {
   }, [current]);
 
   useEffect(() => {
+    if (isPreview) return;
     if (!flipped) return;
     if (!current?.example?.trim()) return;
     if (exampleSrcOverride[current.id] || current.exampleAudioSrc) return;
@@ -242,35 +261,36 @@ export default function StudyClient() {
     })();
 
     return () => ac.abort();
-  }, [flipped, current, exampleSrcOverride]);
+  }, [flipped, current, exampleSrcOverride, isPreview]);
 
   function mark(nextBucket: "KNOWN" | "FORGOTTEN") {
     if (!current) return;
     setError(null);
     const id = current.id;
     const removeIndex = words.findIndex((w) => w.id === id);
-    const nextWords = words.filter((w) => w.id !== id);
 
-    void fetch(`/api/words/${id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ bucket: nextBucket }),
-    }).then((res) => {
-      if (!res.ok) setError("Could not save your answer. Check your connection.");
+    void persistWordBucket(mode, id, nextBucket, setOverride).then((ok) => {
+      if (!ok) setError("Could not save your answer. Check your connection.");
     });
 
     setFlipped(false);
-    setWords(nextWords);
+    if (!isPreviewLocalWordId(id)) {
+      setRawWords((prev) => prev.filter((w) => w.id !== id));
+    } else {
+      setStudiedIds((prev) => new Set(prev).add(id));
+    }
+
+    const nextLength = Math.max(0, words.length - 1);
     setIdx((oldIdx) => {
-      if (nextWords.length === 0) return 0;
+      if (nextLength === 0) return 0;
       if (removeIndex < oldIdx) return oldIdx - 1;
-      if (removeIndex === oldIdx) return Math.min(oldIdx, nextWords.length - 1);
+      if (removeIndex === oldIdx) return Math.min(oldIdx, nextLength - 1);
       return oldIdx;
     });
     setShownIdx((oldIdx) => {
-      if (nextWords.length === 0) return 0;
+      if (nextLength === 0) return 0;
       if (removeIndex < oldIdx) return oldIdx - 1;
-      if (removeIndex === oldIdx) return Math.min(oldIdx, nextWords.length - 1);
+      if (removeIndex === oldIdx) return Math.min(oldIdx, nextLength - 1);
       return oldIdx;
     });
   }
@@ -306,17 +326,12 @@ export default function StudyClient() {
       tabIndex={-1}
       className="mx-auto w-full max-w-3xl p-6 outline-none focus:outline-none"
     >
+      {isPreview ? <PreviewModeBanner /> : null}
       <AppPageHeader
         kicker="Study mode"
         title="Study"
         showBottomBorder={false}
-        actions={
-          <>
-            <AppNavLink href="/app">Library</AppNavLink>
-            <AppQuizNavLink />
-            <AppAccountMenu />
-          </>
-        }
+        actions={<AppNavActions mode={mode} variant="study" />}
       />
 
       <div className="mt-6 flex flex-wrap items-center gap-2">

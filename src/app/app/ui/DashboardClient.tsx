@@ -7,11 +7,18 @@ import { clampImageFocus } from "@/lib/wordImageFocus";
 import { wordBucketBadgeClass } from "@/lib/wordBucketStyles";
 import WordImage from "@/components/WordImage";
 import WordImageFullscreenOverlay from "@/components/WordImageFullscreenOverlay";
+import HomeLogoLink from "@/components/app/HomeLogoLink";
 import LogoMark from "@/components/LogoMark";
 import AlertBanner from "@/components/app/AlertBanner";
-import AppAccountMenu from "@/components/app/AppAccountMenu";
-import AppNavLink from "@/components/app/AppNavLink";
-import AppQuizNavLink from "@/components/app/AppQuizNavLink";
+import AppNavActions from "@/components/app/AppNavActions";
+import PreviewModeBanner from "@/components/preview/PreviewModeBanner";
+import { wordsApiPath } from "@/lib/preview/paths";
+import { persistWordBucket } from "@/lib/preview/persistWordBucket";
+import { usePreviewBucketOverrides } from "@/lib/preview/usePreviewBucketOverrides";
+import { usePreviewDeck } from "@/lib/preview/usePreviewDeck";
+import { readFileAsDataUrl } from "@/lib/preview/readFileAsDataUrl";
+import { isPreviewLocalWordId } from "@/lib/preview/previewLocalWord";
+import type { AppMode } from "@/types/appMode";
 import { fetchAudioTts } from "@/lib/fetchAudioTts";
 import { isLocalDevHost } from "@/lib/isLocalDevHost";
 import {
@@ -32,9 +39,16 @@ function textSizeForLength(args: {
   return args.classes[0];
 }
 
-export default function DashboardClient() {
+export default function DashboardClient({
+  mode = "app",
+}: {
+  mode?: AppMode;
+}) {
+  const isPreview = mode === "preview";
+  const { setOverride } = usePreviewBucketOverrides();
   const [active, setActive] = useState<DeckTab>("MIXED");
-  const [words, setWords] = useState<WordCard[]>([]);
+  const [rawWords, setRawWords] = useState<WordCard[]>([]);
+  const { words, addLocalWord } = usePreviewDeck(mode, rawWords, active);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +93,8 @@ export default function DashboardClient() {
   const [deletingNow, setDeletingNow] = useState(false);
 
   async function regenerateCardAudio(word: WordCard) {
+    if (isPreview) return;
+
     const termTrim = word.term.trim();
     if (!termTrim) {
       setError("Word is required to regenerate audio.");
@@ -146,7 +162,7 @@ export default function DashboardClient() {
   async function load(opts?: { silent?: boolean }) {
     if (!opts?.silent) setLoading(true);
     setError(null);
-    const res = await fetch(`/api/words?bucket=${active}&library=1`);
+    const res = await fetch(`${wordsApiPath(mode)}?bucket=${active}&library=1`);
     const json = (await res.json().catch(() => null)) as
       | { ok: true; words: WordCard[] }
       | { error: string }
@@ -159,7 +175,7 @@ export default function DashboardClient() {
       return;
     }
 
-    setWords(json.words);
+    setRawWords(json.words);
   }
 
   useEffect(() => {
@@ -299,21 +315,19 @@ export default function DashboardClient() {
 
   async function markWord(word: WordCard, nextBucket: "KNOWN" | "FORGOTTEN") {
     setError(null);
-    const res = await fetch(`/api/words/${word.id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ bucket: nextBucket }),
-    });
 
-    if (!res.ok) {
+    const ok = await persistWordBucket(mode, word.id, nextBucket, setOverride);
+    if (!ok) {
       setError("Could not update card status. Check your connection.");
       return;
     }
 
     if (active !== "MIXED" && nextBucket !== active) {
-      setWords((prev) => prev.filter((w) => w.id !== word.id));
-    } else {
-      setWords((prev) =>
+      if (!isPreviewLocalWordId(word.id)) {
+        setRawWords((prev) => prev.filter((w) => w.id !== word.id));
+      }
+    } else if (!isPreview) {
+      setRawWords((prev) =>
         prev.map((w) => (w.id === word.id ? { ...w, bucket: nextBucket } : w)),
       );
     }
@@ -323,6 +337,51 @@ export default function DashboardClient() {
     setSaving(true);
     setError(null);
     setNotice(null);
+
+    const termTrim = term.trim();
+    const meaningTrim = meaning.trim();
+    if (!termTrim || !meaningTrim) {
+      setSaving(false);
+      setError("Word and meaning are required.");
+      return;
+    }
+
+    if (isPreview) {
+      try {
+        let imageDataUrl: string | null = null;
+        if (addImageFile) {
+          const invalid = validateWordImageFile(addImageFile);
+          if (invalid) {
+            setSaving(false);
+            setError(invalid);
+            setAddImagePickerFile(null);
+            return;
+          }
+          imageDataUrl = await readFileAsDataUrl(addImageFile);
+        }
+
+        addLocalWord({
+          term: termTrim,
+          meaning: meaningTrim,
+          example: example.trim() || null,
+          bucket: "FORGOTTEN",
+          imageDataUrl,
+          imageFocusX: addImageFocusX,
+          imageFocusY: addImageFocusY,
+        });
+
+        setShowAdd(false);
+        setTerm("");
+        setMeaning("");
+        setExample("");
+        setAddImagePickerFile(null);
+        setNotice("Card saved in this browser only.");
+      } catch {
+        setError("Could not save card. Try a smaller image.");
+      }
+      setSaving(false);
+      return;
+    }
 
     let audioPublicId: string | undefined;
     let audioFailed = false;
@@ -432,7 +491,7 @@ export default function DashboardClient() {
   }
 
   async function saveEdit() {
-    if (!editing) return;
+    if (!editing || isPreview) return;
     if (editImageRevertTimerRef.current) {
       clearTimeout(editImageRevertTimerRef.current);
       editImageRevertTimerRef.current = null;
@@ -563,7 +622,7 @@ export default function DashboardClient() {
   }
 
   async function confirmDelete() {
-    if (!deleting) return;
+    if (!deleting || isPreview) return;
     setDeletingNow(true);
     setError(null);
     setNotice(null);
@@ -584,9 +643,10 @@ export default function DashboardClient() {
 
   return (
     <div className="mx-auto w-full max-w-6xl p-6">
+      {isPreview ? <PreviewModeBanner /> : null}
       <header className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <LogoMark />
+          {isPreview ? <HomeLogoLink /> : <LogoMark />}
           <div className="flex flex-col">
             <div className="text-sm font-medium">Library</div>
             <div className="text-xs text-zinc-600 dark:text-zinc-400">
@@ -612,10 +672,7 @@ export default function DashboardClient() {
           >
             + Add word
           </button>
-          <AppNavLink href="/app/study">Study</AppNavLink>
-          <AppQuizNavLink />
-
-          <AppAccountMenu />
+          <AppNavActions mode={mode} variant="library" />
         </div>
       </header>
 
@@ -668,7 +725,8 @@ export default function DashboardClient() {
             <div key={w.id} className="h-full min-h-0">
               <LibraryCard
                 word={w}
-                isLocalDev={isLocalDev}
+                isLocalDev={isLocalDev && !isPreview}
+                readOnly={isPreview}
                 isRegenerating={regeneratingCardId === w.id}
                 onRegenerate={regenerateCardAudio}
                 onEdit={openEdit}
@@ -968,6 +1026,7 @@ export default function DashboardClient() {
 function LibraryCard({
   word,
   isLocalDev,
+  readOnly = false,
   isRegenerating,
   onRegenerate,
   onEdit,
@@ -976,6 +1035,7 @@ function LibraryCard({
 }: {
   word: WordCard;
   isLocalDev: boolean;
+  readOnly?: boolean;
   isRegenerating: boolean;
   onRegenerate: (w: WordCard) => void;
   onEdit: (w: WordCard) => void;
@@ -1102,7 +1162,7 @@ function LibraryCard({
             {word.term}
           </div>
         </div>
-        {toolbar}
+        {readOnly ? null : toolbar}
       </div>
 
       <div className="mt-3 flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">

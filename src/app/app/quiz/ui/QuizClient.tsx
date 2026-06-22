@@ -1,10 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import AppNavActions from "@/components/app/AppNavActions";
 import AppNavLink from "@/components/app/AppNavLink";
-import AppQuizNavLink from "@/components/app/AppQuizNavLink";
 import AppPageHeader from "@/components/app/AppPageHeader";
-import AppAccountMenu from "@/components/app/AppAccountMenu";
+import PreviewModeBanner from "@/components/preview/PreviewModeBanner";
+import {
+  applyPreviewBucketOverridesToQuestions,
+  applyPreviewBucketOverridesToWords,
+  usePreviewBucketOverrides,
+} from "@/lib/preview/usePreviewBucketOverrides";
+import { buildPreviewQuizQuestions } from "@/lib/preview/buildPreviewQuizQuestions";
+import { mergePreviewDeck } from "@/lib/preview/deckUtils";
+import { usePreviewLocalWords } from "@/lib/preview/usePreviewLocalWords";
+import { isPreviewLocalWordId } from "@/lib/preview/previewLocalWord";
+import { persistWordBucket } from "@/lib/preview/persistWordBucket";
+import { quizApiPath, routesForMode, wordsApiPath } from "@/lib/preview/paths";
+import type { AppMode } from "@/types/appMode";
 import AlertBanner from "@/components/app/AlertBanner";
 import WordImage from "@/components/WordImage";
 import WordImageFullscreenOverlay from "@/components/WordImageFullscreenOverlay";
@@ -21,9 +33,16 @@ type QuizJson =
 
 type Props = {
   showImages?: boolean;
+  mode?: AppMode;
 };
 
-export default function QuizClient({ showImages = true }: Props) {
+export default function QuizClient({
+  showImages = true,
+  mode = "app",
+}: Props) {
+  const isPreview = mode === "preview";
+  const { words: localWords } = usePreviewLocalWords();
+  const { setOverride } = usePreviewBucketOverrides();
   const promptId = useId();
   const rootRef = useRef<HTMLDivElement | null>(null);
 
@@ -49,20 +68,51 @@ export default function QuizClient({ showImages = true }: Props) {
     setMarkError(null);
     setMarkingWordId(null);
 
-    const res = await fetch("/api/quiz", { cache: "no-store" });
+    const res = await fetch(quizApiPath(mode), { cache: "no-store" });
     const json = (await res.json().catch(() => null)) as QuizJson;
 
-    setLoading(false);
-
     if (!res.ok || !json || !("ok" in json && json.ok)) {
+      setLoading(false);
       setQuestions([]);
       setError(json && "error" in json ? json.error : "Could not load quiz.");
       return;
     }
 
+    if (mode === "preview") {
+      const wordsRes = await fetch(
+        `${wordsApiPath(mode)}?bucket=MIXED&library=1`,
+        { cache: "no-store" },
+      );
+      const wordsJson = (await wordsRes.json().catch(() => null)) as
+        | { ok: true; words: import("@/types/word").WordCard[] }
+        | { error: string }
+        | null;
+
+      const serverWords =
+        wordsRes.ok && wordsJson && "ok" in wordsJson ? wordsJson.words : [];
+      const merged = applyPreviewBucketOverridesToWords(
+        mergePreviewDeck(serverWords, localWords),
+      );
+      const localOrdered = merged.filter((w) => isPreviewLocalWordId(w.id));
+      const serverQuestions = applyPreviewBucketOverridesToQuestions(
+        json.questions,
+      );
+      const questions = buildPreviewQuizQuestions({
+        localWords: localOrdered,
+        allWords: merged,
+        serverQuestions,
+      });
+
+      setLoading(false);
+      setQuestions(questions);
+      setPicked(Array.from({ length: questions.length }, () => null));
+      return;
+    }
+
+    setLoading(false);
     setQuestions(json.questions);
     setPicked(Array.from({ length: json.questions.length }, () => null));
-  }, []);
+  }, [localWords, mode]);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -90,31 +140,26 @@ export default function QuizClient({ showImages = true }: Props) {
     setQuestions((prev) =>
       prev.map((q) => (q.wordId === current.wordId ? { ...q, bucket: "FORGOTTEN" } : q)),
     );
-    void fetch(`/api/words/${current.wordId}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ bucket: "FORGOTTEN" }),
-    }).catch(() => {});
-  }, [current, error, finished, loading, picked, step]);
+    void persistWordBucket(mode, current.wordId, "FORGOTTEN", setOverride);
+  }, [current, error, finished, loading, mode, picked, setOverride, step]);
 
   const markWordBucket = useCallback(async (wordId: string, bucket: "KNOWN" | "FORGOTTEN") => {
     setMarkingWordId(wordId);
     setMarkError(null);
-    const res = await fetch(`/api/words/${wordId}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ bucket }),
-    });
+
+    const ok = await persistWordBucket(mode, wordId, bucket, setOverride);
     setMarkingWordId(null);
-    if (!res.ok) {
+
+    if (!ok) {
       setMarkError("Could not update card status. Check your connection.");
       return;
     }
+
     if (bucket === "FORGOTTEN") forgottenMarkedRef.current.add(wordId);
     setQuestions((prev) =>
       prev.map((q) => (q.wordId === wordId ? { ...q, bucket } : q)),
     );
-  }, []);
+  }, [mode, setOverride]);
 
   const score = useMemo(() => {
     if (!finished || !questions.length) return null;
@@ -233,18 +278,12 @@ export default function QuizClient({ showImages = true }: Props) {
       className="mx-auto flex min-h-0 flex-1 w-full max-w-6xl flex-col overflow-hidden px-4 pb-4 pt-4 outline-none focus:outline-none sm:px-6 sm:pb-5 sm:pt-5"
     >
       <div className="shrink-0">
+        {isPreview ? <PreviewModeBanner /> : null}
         <AppPageHeader
           kicker="Vocabulary"
           title="Quiz"
           showBottomBorder={false}
-          actions={
-            <>
-              <AppNavLink href="/app">Library</AppNavLink>
-              <AppNavLink href="/app/study">Study</AppNavLink>
-              <AppQuizNavLink />
-              <AppAccountMenu />
-            </>
-          }
+          actions={<AppNavActions mode={mode} variant="quiz" />}
         />
       </div>
 
@@ -602,7 +641,7 @@ export default function QuizClient({ showImages = true }: Props) {
             <button type="button" className={btnPrimary} onClick={() => void loadQuiz()}>
               Try again
             </button>
-            <AppNavLink href="/app">Back to library</AppNavLink>
+            <AppNavLink href={routesForMode(mode).library}>Back to library</AppNavLink>
           </div>
         </div>
       ) : null}
