@@ -49,10 +49,6 @@ function getPreviewBucketOverridesSnapshot(): Record<string, WordBucket> {
   }
 }
 
-export function readPreviewBucketOverrides(): Record<string, WordBucket> {
-  return getPreviewBucketOverridesSnapshot();
-}
-
 export function applyPreviewBucketOverridesToWords(
   words: WordCard[],
 ): WordCard[] {

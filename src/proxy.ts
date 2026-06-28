@@ -1,14 +1,23 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
+import { isPreviewEnabled } from "@/lib/preview/userId";
 
 export async function proxy(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
 
-  const isPreview =
+  const isPreviewRoute =
     pathname.startsWith("/preview") || pathname.startsWith("/api/preview");
 
-  if (isPreview) return NextResponse.next();
+  if (isPreviewRoute) {
+    if (!isPreviewEnabled()) {
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json({ error: "Not found" }, { status: 404 });
+      }
+      return new NextResponse(null, { status: 404 });
+    }
+    return NextResponse.next();
+  }
 
   const isProtected =
     pathname.startsWith("/app") ||
