@@ -67,13 +67,6 @@ export function setPreviewBucketOverride(wordId: string, bucket: WordBucket) {
   emit();
 }
 
-export function clearPreviewBucketOverrides() {
-  localStorage.removeItem(STORAGE_KEY);
-  cachedRaw = null;
-  cachedSnapshot = EMPTY_OVERRIDES;
-  emit();
-}
-
 export function applyPreviewBucketOverridesToQuestions(
   questions: QuizQuestion[],
 ): QuizQuestion[] {

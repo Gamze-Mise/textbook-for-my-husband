@@ -7,8 +7,6 @@ import { usePreviewLocalWords } from "@/lib/preview/usePreviewLocalWords";
 import type { AppMode } from "@/types/appMode";
 import type { DeckTab, WordCard } from "@/types/word";
 
-export { mergePreviewDeck, filterDeckByTab } from "@/lib/preview/deckUtils";
-
 export function usePreviewDeck(
   mode: AppMode,
   serverWords: WordCard[],

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getPreviewUserId } from "@/lib/preview/userId";
 
-export function previewUnavailableResponse() {
+function previewUnavailableResponse() {
   return NextResponse.json({ error: "Preview is not available." }, { status: 404 });
 }
 

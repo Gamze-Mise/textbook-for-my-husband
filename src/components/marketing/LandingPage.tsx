@@ -17,7 +17,13 @@ const highlights = [
   { title: "Quiz", text: "Fresh rounds weighted toward words you miss." },
 ] as const;
 
-export default function LandingPage() {
+type LandingPageProps = {
+  previewEnabled?: boolean;
+};
+
+export default function LandingPage({
+  previewEnabled = false,
+}: LandingPageProps) {
   return (
     <div className="relative min-h-svh bg-zinc-50 font-sans text-zinc-950 dark:bg-black dark:text-zinc-50">
       <div
@@ -62,6 +68,11 @@ export default function LandingPage() {
               <Link className={linkSecondary} href="/login">
                 Sign in
               </Link>
+              {previewEnabled ? (
+                <Link className={linkSecondary} href="/preview">
+                  Preview
+                </Link>
+              ) : null}
             </div>
           </section>
 

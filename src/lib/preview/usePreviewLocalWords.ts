@@ -97,13 +97,6 @@ export function addPreviewLocalWord(input: AddPreviewLocalWordInput): WordCard {
   return storedPreviewWordToCard(stored);
 }
 
-export function clearPreviewLocalWords() {
-  localStorage.removeItem(STORAGE_KEY);
-  cachedRaw = null;
-  cachedSnapshot = EMPTY_WORDS;
-  emit();
-}
-
 export function usePreviewLocalWords() {
   const words = useSyncExternalStore(
     subscribe,

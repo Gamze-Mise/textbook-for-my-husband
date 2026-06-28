@@ -62,9 +62,9 @@ Open [http://localhost:3000](http://localhost:3000).
 | `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name                    |
 | `CLOUDINARY_API_KEY`    | Cloudinary API key                       |
 | `CLOUDINARY_API_SECRET` | Cloudinary API secret                    |
-| `PREVIEW_USER_ID`       | Optional. Enables `/preview` demo (user **#2** deck). Omit to disable. |
+| `PREVIEW_USER_ID`       | Set to enable public `/preview` (always user **#1**'s deck). Omit or `0`/`false` to disable. |
 
-Audio and image uploads require valid Cloudinary credentials. Email flows require working SMTP. Word audio uses Google Translate TTS on the server.
+Audio and image uploads require valid Cloudinary credentials. Email flows require working SMTP. Word audio uses Google Translate TTS on the server. With `PREVIEW_USER_ID` set, visitors get Library, Study, and Quiz at `/preview`; bucket changes and browser-only demo cards stay in `localStorage` (no DB writes).
 
 ## Scripts
 
